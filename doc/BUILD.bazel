@@ -1,0 +1,168 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+)
+load(
+    ":defs.bzl",
+    "DEFAULT_TEST_TAGS",
+    "enumerate_filegroup",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+exports_files([
+    # For use by @drake//geometry:meshcat.
+    "favicon.ico",
+])
+
+drake_py_library(
+    name = "defs",
+    srcs = ["defs.py"],
+    data = [
+        ":header_and_footer_images",
+        ":header_and_footer_images.txt",
+    ],
+    visibility = ["//doc:__subpackages__"],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+# For maximum browser compatibility these should be at the root of the
+# generated website and should not be renamed.
+filegroup(
+    name = "favicon",
+    srcs = [
+        # Manual resizing and padding of "assets/drake-dragon.png" to
+        # 192x192px.
+        "android-chrome.png",
+        # Manual resizing and padding of "assets/drake-dragon.png" to
+        # 180x180px.
+        "apple-touch-icon.png",
+        # Minimal configuration for Microsoft browsers. Versions of Edge prior
+        # to the change to WebKit always request a file named
+        # "browserconfig.xml" whether or not an alternative is specified in the
+        # HTML.
+        "browserconfig.xml",
+        # Apple Safari always requests a file named "favicon.ico" whether or
+        # not an alternative favicon is specified in the HTML.
+        # Manual resizing and padding of "assets/drake-dragon.png" to 32x32px
+        # and conversion to ICO format.
+        "favicon.ico",
+        # Manual resizing and padding of "assets/drake-dragon.png" to 32x32px.
+        "favicon.png",
+        # Mask icon for Safari pinned tabs.
+        # Manual removal of colors and layers from "assets/drake-dragon.svg"
+        # and transformation to a 0 0 16 16 view box.
+        "mask-icon.svg",
+        # Site manifest primarily for Android and Chrome.
+        # https://developer.mozilla.org/en-US/docs/Web/Manifest
+        "site.webmanifest",
+    ],
+)
+
+filegroup(
+    name = "header_and_footer_images",
+    srcs = [
+        "images/drake-logo.svg",
+        "images/drake-logo-white.svg",
+        "third_party/images/GitHub-Mark-64px.png",
+        "third_party/images/GitHub-Mark-Light-64px.png",
+    ],
+)
+
+enumerate_filegroup(
+    name = "header_and_footer_images.txt",
+    data = [":header_and_footer_images"],
+)
+
+filegroup(
+    name = "pages_input",
+    srcs = [
+        "_config.yml",
+        "_release-notes/index.html",
+        "images/drake-dragon.png",
+        "images/drake-logo.svg",
+        "images/drake-logo-white.svg",
+        "images/jenkins_bot_reviewable_comment.png",
+        "index.md",
+        "sample_vimrc",
+    ] + glob([
+        "_includes/*.html",
+        "_includes/*.md",
+        "_layouts/*.html",
+        "_pages/*.md",
+        "_release-notes/*.md",
+        "assets/**/*.css",
+        "assets/**/*.js",
+        "third_party/**/*",
+    ]),
+    data = [
+        ":favicon",
+    ],
+)
+
+enumerate_filegroup(
+    name = "pages_input.txt",
+    data = [":pages_input"],
+)
+
+drake_py_binary(
+    name = "pages",
+    srcs = ["pages.py"],
+    add_test_rule = 1,
+    data = [
+        ":pages_input",
+        ":pages_input.txt",
+    ],
+    test_rule_args = ["--out_dir=<test>"],
+    test_rule_tags = DEFAULT_TEST_TAGS,
+    deps = [
+        ":defs",
+    ],
+)
+
+drake_py_binary(
+    name = "build",
+    srcs = ["build.py"],
+    add_test_rule = 1,
+    data = [
+        ":pages",
+        "//doc/doxygen_cxx:build",
+        "//doc/pydrake:build",
+        "//doc/styleguide:build",
+    ],
+    test_rule_args = [
+        "--out_dir=<test>",
+        # Only generate some modules, so that the test provides quick feedback.
+        "--quick",
+        "drake/math",
+        "pages",
+        "pydrake.math",
+        "sitemap",
+        "styleguide",
+    ],
+    test_rule_tags = DEFAULT_TEST_TAGS,
+    deps = [
+        ":defs",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+# This rule is used by our CI scripts as a single point of entry to ensure that
+# all of our manually-tagged documentation tests pass.
+test_suite(
+    name = "manual_tests",
+    tags = ["manual"],
+    tests = [
+        ":build_test",
+        ":pages_test",
+        "//doc/doxygen_cxx:build_test",
+        "//doc/pydrake:build_test",
+        "//doc/styleguide:build_test",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,69 @@
+load("//tools/install:install_data.bzl", "install_data")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+load("//tools/skylark:drake_data.bzl", "models_filegroup")
+
+package(default_visibility = ["//visibility:private"])
+
+models_filegroup(
+    name = "models",
+    visibility = ["//visibility:public"],
+)
+
+install_data(
+    name = "install_data",
+    data = [":models"],
+    visibility = ["//visibility:public"],
+)
+
+drake_cc_library(
+    name = "cart_pole_params",
+    srcs = ["cart_pole_params.cc"],
+    hdrs = ["cart_pole_params.h"],
+    deps = [
+        "//common:dummy_value",
+        "//common:essential",
+        "//common:name_value",
+        "//common/symbolic:expression",
+        "//systems/framework:vector",
+    ],
+)
+
+drake_cc_binary(
+    name = "cart_pole_passive_simulation",
+    srcs = ["cart_pole_passive_simulation.cc"],
+    add_test_rule = 1,
+    data = ["cart_pole.sdf"],
+    test_rule_args = [
+        "--simulation_time=0.1",
+        "--target_realtime_rate=0.0",
+    ],
+    deps = [
+        "//common:add_text_logging_gflags",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//visualization:visualization_config_functions",
+        "@gflags",
+    ],
+)
+
+drake_cc_googletest(
+    name = "cart_pole_test",
+    data = [":models"],
+    deps = [
+        ":cart_pole_params",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:limit_malloc",
+        "//multibody/parsing",
+        "//multibody/plant",
+    ],
+)
+
+add_lint_tests()

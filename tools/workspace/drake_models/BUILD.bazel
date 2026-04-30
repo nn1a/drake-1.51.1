@@ -1,0 +1,37 @@
+load("//doc:defs.bzl", "enumerate_filegroup")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:drake_py.bzl", "drake_py_unittest")
+
+enumerate_filegroup(
+    name = "inventory.txt",
+    data = ["@drake_models"],
+)
+
+drake_py_unittest(
+    name = "parse_test",
+    timeout = "moderate",
+    data = [
+        ":inventory.txt",
+        "@drake_models",
+    ],
+    shard_count = 16,
+    deps = [
+        "//bindings/pydrake",
+        "//bindings/pydrake/common/test_utilities:meta_py",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_unittest(
+    name = "tri_homecart_test",
+    data = [
+        "@drake_models//:tri_homecart",
+        "@drake_models//:ur_description",
+        "@drake_models//:wsg_50_description",
+    ],
+    deps = [
+        "//bindings/pydrake",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,20 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "models",
+    srcs = [
+        "models/box.urdf",
+        "models/box_small.urdf",
+    ],
+)
+
+filegroup(
+    name = "doxygen_input",
+    srcs = ["multibody_doxygen.h"],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+add_lint_tests()

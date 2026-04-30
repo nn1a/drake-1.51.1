@@ -1,0 +1,126 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "perception",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":depth_image_to_point_cloud",
+        ":point_cloud",
+        ":point_cloud_flags",
+        ":point_cloud_to_lcm",
+    ],
+)
+
+drake_cc_library(
+    name = "point_cloud_flags",
+    srcs = ["point_cloud_flags.cc"],
+    hdrs = ["point_cloud_flags.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "point_cloud",
+    srcs = ["point_cloud.cc"],
+    hdrs = ["point_cloud.h"],
+    deps = [
+        ":point_cloud_flags",
+        "//common:essential",
+        "//common:parallelism",
+    ],
+    implementation_deps = [
+        "//common:unused",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+        "@nanoflann_internal//:nanoflann",
+    ],
+)
+
+drake_cc_library(
+    name = "depth_image_to_point_cloud",
+    srcs = ["depth_image_to_point_cloud.cc"],
+    hdrs = ["depth_image_to_point_cloud.h"],
+    deps = [
+        ":point_cloud",
+        "//common:essential",
+        "//math:geometric_transform",
+        "//systems/framework:leaf_system",
+        "//systems/sensors:camera_info",
+        "//systems/sensors:image",
+    ],
+)
+
+drake_cc_library(
+    name = "point_cloud_to_lcm",
+    srcs = ["point_cloud_to_lcm.cc"],
+    hdrs = ["point_cloud_to_lcm.h"],
+    deps = [
+        ":point_cloud",
+        "//lcmtypes:lcmtypes_drake_cc",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "depth_image_to_point_cloud_test",
+    deps = [
+        ":depth_image_to_point_cloud",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//systems/sensors:camera_info",
+    ],
+)
+
+drake_cc_googletest(
+    name = "point_cloud_flags_test",
+    deps = [
+        ":point_cloud_flags",
+        "//common/test_utilities:expect_no_throw",
+    ],
+)
+
+drake_cc_googletest(
+    name = "point_cloud_test_serial",
+    srcs = ["test/point_cloud_test.cc"],
+    defines = ["ENABLE_PARALLEL_OPS=false"],
+    num_threads = 1,
+    deps = [
+        ":point_cloud",
+        "//common:random",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "point_cloud_test_parallel",
+    srcs = ["test/point_cloud_test.cc"],
+    defines = ["ENABLE_PARALLEL_OPS=true"],
+    num_threads = 2,
+    deps = [
+        ":point_cloud",
+        "//common:random",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "point_cloud_to_lcm_test",
+    deps = [
+        ":point_cloud_to_lcm",
+        "//common/test_utilities:limit_malloc",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,27 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+
+licenses(["notice"])  # MIT
+
+VIEWER_FILES = [
+    "dist/index.html",
+    "dist/main.min.js",
+]
+
+exports_files(
+    VIEWER_FILES,
+    visibility = ["//visibility:public"],
+)
+
+install(
+    name = "install",
+    docs = [
+        "LICENSE",
+        "dist/main.min.js.THIRD_PARTY_LICENSES.json",
+    ],
+    doc_strip_prefix = ["dist"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["drake_repository_metadata.json"])

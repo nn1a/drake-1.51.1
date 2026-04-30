@@ -1,0 +1,866 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_unittest",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "analysis",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":antiderivative_function",
+        ":batch_eval",
+        ":bogacki_shampine3_integrator",
+        ":dense_output",
+        ":discrete_time_approximation",
+        ":explicit_euler_integrator",
+        ":hermitian_dense_output",
+        ":implicit_euler_integrator",
+        ":implicit_integrator",
+        ":initial_value_problem",
+        ":integrator_base",
+        ":lyapunov",
+        ":monte_carlo",
+        ":radau_integrator",
+        ":realtime_rate_calculator",
+        ":region_of_attraction",
+        ":runge_kutta2_integrator",
+        ":runge_kutta3_integrator",
+        ":runge_kutta5_integrator",
+        ":scalar_dense_output",
+        ":scalar_initial_value_problem",
+        ":scalar_view_dense_output",
+        ":semi_explicit_euler_integrator",
+        ":simulator",
+        ":simulator_config",
+        ":simulator_config_functions",
+        ":simulator_print_stats",
+        ":simulator_status",
+        ":stepwise_dense_output",
+        ":velocity_implicit_euler_integrator",
+    ],
+)
+
+drake_cc_library(
+    name = "simulator_gflags",
+    srcs = ["simulator_gflags.cc"],
+    hdrs = ["simulator_gflags.h"],
+    tags = [
+        # Don't add this library into the ":analysis" package library.
+        # Only programs with a main() function should ever use this header.
+        "exclude_from_package",
+        # Don't install this header via this cc_library, because that would
+        # introduce a dependency from libdrake onto gflags.
+        "exclude_from_libdrake",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":simulator_config",
+        ":simulator_config_functions",
+        "@gflags",
+    ],
+)
+
+drake_cc_library(
+    name = "simulator_config",
+    srcs = ["simulator_config.cc"],
+    hdrs = ["simulator_config.h"],
+    deps = [
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "simulator_config_functions",
+    srcs = ["simulator_config_functions.cc"],
+    hdrs = ["simulator_config_functions.h"],
+    deps = [
+        ":bogacki_shampine3_integrator",
+        ":explicit_euler_integrator",
+        ":implicit_euler_integrator",
+        ":radau_integrator",
+        ":runge_kutta2_integrator",
+        ":runge_kutta3_integrator",
+        ":runge_kutta5_integrator",
+        ":semi_explicit_euler_integrator",
+        ":simulator",
+        ":simulator_config",
+        ":velocity_implicit_euler_integrator",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:nice_type_name",
+        "//systems/framework:leaf_system",
+    ],
+    implementation_deps = [
+        "//multibody/cenic:make_cenic_integrator",
+    ],
+)
+
+drake_cc_library(
+    name = "bogacki_shampine3_integrator",
+    srcs = ["bogacki_shampine3_integrator.cc"],
+    hdrs = ["bogacki_shampine3_integrator.h"],
+    deps = [
+        ":integrator_base",
+    ],
+)
+
+drake_cc_library(
+    name = "dense_output",
+    srcs = ["dense_output.cc"],
+    hdrs = ["dense_output.h"],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "discrete_time_approximation",
+    srcs = ["discrete_time_approximation.cc"],
+    hdrs = ["discrete_time_approximation.h"],
+    deps = [
+        ":simulator_config_functions",
+        "//common:nice_type_name",
+        "//systems/framework",
+        "//systems/primitives:affine_system",
+        "//systems/primitives:linear_system",
+    ],
+)
+
+drake_cc_library(
+    name = "stepwise_dense_output",
+    srcs = ["stepwise_dense_output.cc"],
+    hdrs = ["stepwise_dense_output.h"],
+    deps = [
+        ":dense_output",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "hermitian_dense_output",
+    srcs = ["hermitian_dense_output.cc"],
+    hdrs = ["hermitian_dense_output.h"],
+    deps = [
+        ":stepwise_dense_output",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:extract_double",
+        "//common/trajectories:piecewise_polynomial",
+        "//systems/framework:vector",
+    ],
+)
+
+drake_cc_library(
+    name = "scalar_dense_output",
+    srcs = ["scalar_dense_output.cc"],
+    hdrs = ["scalar_dense_output.h"],
+    deps = [
+        ":dense_output",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "scalar_view_dense_output",
+    srcs = ["scalar_view_dense_output.cc"],
+    hdrs = ["scalar_view_dense_output.h"],
+    deps = [
+        ":dense_output",
+        ":scalar_dense_output",
+        "//common:default_scalars",
+        "//common:essential",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "integrator_base",
+    srcs = ["integrator_base.cc"],
+    hdrs = ["integrator_base.h"],
+    deps = [
+        "//common:default_scalars",
+        "//common/trajectories:piecewise_polynomial",
+        "//systems/framework:context",
+        "//systems/framework:system",
+    ],
+)
+
+drake_cc_library(
+    name = "explicit_euler_integrator",
+    srcs = ["explicit_euler_integrator.cc"],
+    hdrs = ["explicit_euler_integrator.h"],
+    deps = [
+        ":integrator_base",
+    ],
+)
+
+drake_cc_library(
+    name = "lyapunov",
+    srcs = ["lyapunov.cc"],
+    hdrs = ["lyapunov.h"],
+    deps = [
+        "//common:essential",
+        "//math:autodiff",
+        "//math:gradient",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
+        "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "monte_carlo",
+    srcs = ["monte_carlo.cc"],
+    hdrs = ["monte_carlo.h"],
+    deps = [
+        ":simulator",
+        "//common:parallelism",
+        "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "region_of_attraction",
+    srcs = ["region_of_attraction.cc"],
+    hdrs = ["region_of_attraction.h"],
+    deps = [
+        "//common:name_value",
+        "//math:continuous_lyapunov_equation",
+        "//math:matrix_util",
+        "//math:quadratic_form",
+        "//solvers:choose_best_solver",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
+        "//systems/framework",
+        "//systems/primitives:linear_system",
+    ],
+)
+
+drake_cc_library(
+    name = "runge_kutta2_integrator",
+    srcs = ["runge_kutta2_integrator.cc"],
+    hdrs = ["runge_kutta2_integrator.h"],
+    deps = [
+        ":integrator_base",
+    ],
+)
+
+drake_cc_library(
+    name = "runge_kutta3_integrator",
+    srcs = ["runge_kutta3_integrator.cc"],
+    hdrs = [
+        "runge_kutta3_integrator.h",
+    ],
+    deps = [
+        ":integrator_base",
+        ":runge_kutta2_integrator",
+    ],
+)
+
+drake_cc_library(
+    name = "runge_kutta5_integrator",
+    srcs = ["runge_kutta5_integrator.cc"],
+    hdrs = ["runge_kutta5_integrator.h"],
+    deps = [
+        ":integrator_base",
+    ],
+)
+
+drake_cc_library(
+    name = "implicit_euler_integrator",
+    srcs = ["implicit_euler_integrator.cc"],
+    hdrs = [
+        "implicit_euler_integrator.h",
+    ],
+    deps = [
+        ":implicit_integrator",
+        ":runge_kutta2_integrator",
+        "//math:gradient",
+    ],
+)
+
+drake_cc_library(
+    name = "velocity_implicit_euler_integrator",
+    srcs = ["velocity_implicit_euler_integrator.cc"],
+    hdrs = [
+        "velocity_implicit_euler_integrator.h",
+    ],
+    deps = [
+        ":implicit_integrator",
+        "//math:compute_numerical_gradient",
+    ],
+)
+
+drake_cc_library(
+    name = "implicit_integrator",
+    srcs = ["implicit_integrator.cc"],
+    hdrs = [
+        "implicit_integrator.h",
+    ],
+    deps = [
+        ":integrator_base",
+        "//math:gradient",
+    ],
+)
+
+drake_cc_library(
+    name = "realtime_rate_calculator",
+    srcs = ["realtime_rate_calculator.cc"],
+    hdrs = [
+        "realtime_rate_calculator.h",
+    ],
+    deps = [
+        "//common:timer",
+    ],
+)
+
+drake_cc_library(
+    name = "radau_integrator",
+    srcs = ["radau_integrator.cc"],
+    hdrs = [
+        "radau_integrator.h",
+    ],
+    deps = [
+        ":bogacki_shampine3_integrator",
+        ":implicit_integrator",
+        ":runge_kutta2_integrator",
+    ],
+)
+
+drake_cc_library(
+    name = "semi_explicit_euler_integrator",
+    srcs = ["semi_explicit_euler_integrator.cc"],
+    hdrs = ["semi_explicit_euler_integrator.h"],
+    deps = [
+        ":integrator_base",
+    ],
+)
+
+drake_cc_library(
+    name = "initial_value_problem",
+    srcs = [
+        "initial_value_problem.cc",
+    ],
+    hdrs = [
+        "initial_value_problem.h",
+    ],
+    deps = [
+        ":dense_output",
+        ":hermitian_dense_output",
+        ":integrator_base",
+        ":runge_kutta3_integrator",
+        "//common:default_scalars",
+        "//systems/framework:context",
+        "//systems/framework:continuous_state",
+        "//systems/framework:leaf_system",
+        "//systems/framework:parameters",
+        "//systems/framework:vector",
+    ],
+)
+
+drake_cc_library(
+    name = "scalar_initial_value_problem",
+    srcs = [
+        "scalar_initial_value_problem.cc",
+    ],
+    hdrs = [
+        "scalar_initial_value_problem.h",
+    ],
+    deps = [
+        ":initial_value_problem",
+        ":scalar_dense_output",
+        ":scalar_view_dense_output",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:unused",
+    ],
+)
+
+drake_cc_library(
+    name = "antiderivative_function",
+    srcs = [
+        "antiderivative_function.cc",
+    ],
+    hdrs = [
+        "antiderivative_function.h",
+    ],
+    deps = [
+        ":scalar_dense_output",
+        ":scalar_initial_value_problem",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:unused",
+    ],
+)
+
+drake_cc_library(
+    name = "batch_eval",
+    srcs = [
+        "batch_eval.cc",
+    ],
+    hdrs = [
+        "batch_eval.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//common:parallelism",
+        "//systems/framework:system",
+    ],
+    implementation_deps = [
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+    ],
+)
+
+drake_cc_library(
+    name = "simulator_print_stats",
+    srcs = ["simulator_print_stats.cc"],
+    hdrs = ["simulator_print_stats.h"],
+    deps = [
+        ":simulator",
+    ],
+    implementation_deps = [
+        ":implicit_integrator",
+        ":integrator_base",
+        "@fmt",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+drake_cc_library(
+    name = "simulator_status",
+    srcs = ["simulator_status.cc"],
+    hdrs = ["simulator_status.h"],
+    deps = [
+        "//systems/framework:system_base",
+        "@fmt",
+    ],
+)
+
+# N.B. This library does not have all of its dependencies declared. Instead,
+# it defines only the headers such that it can be used by `pydrake` without
+# installing the file. (If we just used `install_hdrs_exclude`, the header
+# would not make it into `//:drake_shared_library`.)
+drake_cc_library(
+    name = "simulator_python_internal_header",
+    hdrs = ["simulator_python_internal.h"],
+    install_hdrs_exclude = ["simulator_python_internal.h"],
+    tags = ["exclude_from_package"],
+    visibility = ["//bindings/pydrake/systems:__pkg__"],
+)
+
+drake_cc_library(
+    name = "simulator",
+    srcs = ["simulator.cc"],
+    hdrs = ["simulator.h"],
+    deps = [
+        ":integrator_base",
+        ":simulator_config",
+        ":simulator_status",
+        "//common:extract_double",
+        "//common:name_value",
+        "//systems/framework:context",
+        "//systems/framework:system",
+    ],
+    implementation_deps = [
+        ":runge_kutta3_integrator",
+        ":simulator_python_internal_header",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "simulator_config_functions_test",
+    deps = [
+        ":simulator",
+        ":simulator_config_functions",
+        "//common:nice_type_name",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//common/yaml",
+        "//systems/framework:leaf_system",
+        "//systems/primitives:constant_vector_source",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_config_functions_cenic_test",
+    deps = [
+        ":simulator",
+        ":simulator_config_functions",
+        "//multibody/cenic",
+        "//planning:robot_diagram_builder",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_status_test",
+    deps = [
+        ":simulator_status",
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_test",
+    deps = [
+        ":explicit_euler_integrator",
+        ":implicit_euler_integrator",
+        ":runge_kutta3_integrator",
+        ":simulator",
+        "//common/test_utilities:expect_throws_message",
+        "//common/test_utilities:is_dynamic_castable",
+        "//systems/analysis/test_utilities:controlled_spring_mass_system",
+        "//systems/analysis/test_utilities:logistic_system",
+        "//systems/analysis/test_utilities:my_spring_mass_system",
+        "//systems/analysis/test_utilities:stateless_system",
+        "//systems/primitives:constant_vector_source",
+        "//systems/primitives:integrator",
+        "//systems/primitives:vector_log_sink",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_limit_malloc_test",
+    deps = [
+        ":simulator",
+        "//common/test_utilities:limit_malloc",
+        "//systems/framework:diagram_builder",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_denorm_test",
+    # Valgrind core does not support the floating point register
+    # instructions that this test uses.
+    tags = ["no_valgrind_tools"],
+    deps = [
+        ":simulator",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_print_stats_test",
+    deps = [
+        ":simulator_print_stats",
+        "//systems/primitives:constant_vector_source",
+    ],
+)
+
+drake_cc_googletest(
+    name = "simulator_python_internal_test",
+    deps = [
+        ":simulator",
+        ":simulator_python_internal_header",
+        "//systems/primitives:constant_vector_source",
+    ],
+)
+
+drake_cc_binary(
+    name = "simulator_gflags_main",
+    testonly = True,
+    srcs = ["test/simulator_gflags_main.cc"],
+    deps = [
+        ":simulator_config_functions",
+        ":simulator_gflags",
+        "//common/yaml",
+        "//systems/primitives:constant_vector_source",
+    ],
+)
+
+drake_py_unittest(
+    name = "simulator_gflags_test",
+    data = [
+        ":simulator_gflags_main",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_cc_googletest(
+    name = "batch_eval_test",
+    # This test launches 2 threads to test both serial and parallel code paths
+    # in MonteCarloSimulation.
+    tags = ["cpu:2"],
+    deps = [
+        ":batch_eval",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//systems/primitives:linear_system",
+        "//systems/primitives:symbolic_vector_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "bogacki_shampine3_integrator_test",
+    # If necessary, increase test timeout to 'moderate' when run with Valgrind
+    # and/or disable in debug mode.
+    deps = [
+        ":bogacki_shampine3_integrator",
+        ":runge_kutta2_integrator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:geometric_transform",
+        "//multibody/plant",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "discrete_time_approximation_test",
+    data = [
+        "//examples/multibody/cart_pole:models",
+    ],
+    deps = [
+        ":discrete_time_approximation",
+        ":simulator",
+        "//common:nice_type_name",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/controllers:linear_quadratic_regulator",
+        "//systems/primitives",
+    ],
+)
+
+drake_cc_googletest(
+    name = "explicit_euler_integrator_test",
+    timeout = "moderate",
+    deps = [
+        ":explicit_euler_integrator",
+        "//common/test_utilities:expect_no_throw",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "implicit_euler_integrator_test",
+    timeout = "moderate",
+    shard_count = 2,
+    # Adding cache invalidation made this take too long with Valgrind.
+    # See Drake issue #9261.
+    tags = [
+        "no_memcheck",
+    ],
+    deps = [
+        ":implicit_euler_integrator",
+        "//common/test_utilities:expect_throws_message",
+        "//systems/analysis/test_utilities:implicit_integrator_test",
+        "//systems/analysis/test_utilities:quadratic_scalar_system",
+        "//systems/analysis/test_utilities:spring_mass_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "implicit_integrator_test",
+    deps = [
+        ":implicit_integrator",
+        ":simulator_config_functions",
+        "//common:pointer_cast",
+        "//common/test_utilities:expect_no_throw",
+        "//systems/analysis/test_utilities:spring_mass_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "integrator_base_test",
+    deps = [
+        ":integrator_base",
+        ":simulator_config_functions",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//systems/analysis/test_utilities:spring_mass_system",
+        "//systems/primitives:linear_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "realtime_rate_calculator_test",
+    deps = [
+        ":realtime_rate_calculator",
+    ],
+)
+
+drake_cc_googletest(
+    name = "radau_integrator_test",
+    # Note: if memcheck takes too long with Valgrind, disable
+    # memcheck (per Drake issue #9621).
+    timeout = "moderate",
+    shard_count = 2,
+    deps = [
+        ":implicit_euler_integrator",
+        ":radau_integrator",
+        "//systems/analysis/test_utilities:cubic_scalar_system",
+        "//systems/analysis/test_utilities:implicit_integrator_test",
+        "//systems/analysis/test_utilities:linear_scalar_system",
+        "//systems/analysis/test_utilities:quadratic_scalar_system",
+        "//systems/analysis/test_utilities:spring_mass_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "lyapunov_test",
+    deps = [
+        ":lyapunov",
+        "//examples/pendulum:pendulum_plant",
+    ],
+)
+
+drake_cc_googletest(
+    name = "monte_carlo_test",
+    # This test launches 2 threads to test both serial and parallel code paths
+    # in MonteCarloSimulation.
+    tags = ["cpu:2"],
+    deps = [
+        ":monte_carlo",
+        "//systems/primitives:constant_vector_source",
+        "//systems/primitives:pass_through",
+        "//systems/primitives:random_source",
+    ],
+)
+
+drake_cc_googletest(
+    name = "region_of_attraction_test",
+    deps = [
+        ":region_of_attraction",
+        "//solvers:csdp_solver",
+        "//solvers:mosek_solver",
+        "//systems/framework:diagram_builder",
+        "//systems/primitives:constant_vector_source",
+        "//systems/primitives:symbolic_vector_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "runge_kutta2_integrator_test",
+    deps = [
+        ":runge_kutta2_integrator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "runge_kutta3_integrator_test",
+    # Test timeout increased to not timeout when run with Valgrind.
+    timeout = "moderate",
+    # This test is prohibitively slow with --compilation_mode=dbg.
+    disable_in_compilation_mode_dbg = True,
+    deps = [
+        ":runge_kutta3_integrator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:geometric_transform",
+        "//multibody/plant",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "runge_kutta5_integrator_test",
+    # Test timeout increased to not timeout when run with Valgrind.
+    timeout = "moderate",
+    # This test is prohibitively slow with --compilation_mode=dbg.
+    disable_in_compilation_mode_dbg = True,
+    deps = [
+        ":runge_kutta5_integrator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:geometric_transform",
+        "//multibody/plant",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "semi_explicit_euler_integrator_test",
+    timeout = "moderate",
+    deps = [
+        ":explicit_euler_integrator",
+        ":semi_explicit_euler_integrator",
+        "//multibody/plant",
+        "//systems/analysis/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "velocity_implicit_euler_integrator_test",
+    # Note: if memcheck takes too long with Valgrind, disable
+    # memcheck (per Drake issue #9621).
+    timeout = "moderate",
+    shard_count = 2,
+    deps = [
+        ":velocity_implicit_euler_integrator",
+        "//systems/analysis/test_utilities:implicit_integrator_test",
+        "//systems/analysis/test_utilities:quadratic_scalar_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "initial_value_problem_test",
+    timeout = "moderate",
+    deps = [
+        ":initial_value_problem",
+        ":runge_kutta2_integrator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scalar_initial_value_problem_test",
+    deps = [
+        ":runge_kutta2_integrator",
+        ":scalar_initial_value_problem",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "antiderivative_function_test",
+    deps = [
+        ":antiderivative_function",
+        ":runge_kutta2_integrator",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hermitian_dense_output_test",
+    deps = [
+        ":hermitian_dense_output",
+        "//common:autodiff",
+        "//common:essential",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//common/trajectories:piecewise_polynomial",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scalar_view_dense_output_test",
+    deps = [
+        ":hermitian_dense_output",
+        ":scalar_view_dense_output",
+        "//common:autodiff",
+        "//common:essential",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+add_lint_tests()

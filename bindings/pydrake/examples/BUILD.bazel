@@ -1,0 +1,105 @@
+load("//bindings/pydrake:pydrake.bzl", "add_lint_tests_pydrake")
+load("//tools/install:install.bzl", "install")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+load(
+    "//tools/skylark:pybind.bzl",
+    "drake_pybind_library",
+    "get_drake_py_installs",
+    "get_pybind_package_info",
+)
+
+package(default_visibility = [
+    "//bindings/pydrake:__subpackages__",
+])
+
+# This determines how `PYTHONPATH` is configured, and how to install the
+# bindings.
+PACKAGE_INFO = get_pybind_package_info("//bindings")
+
+drake_pybind_library(
+    name = "examples",
+    cc_deps = [
+        "//bindings/generated_docstrings:examples_acrobot",
+        "//bindings/generated_docstrings:examples_compass_gait",
+        "//bindings/generated_docstrings:examples_pendulum",
+        "//bindings/generated_docstrings:examples_quadrotor",
+        "//bindings/generated_docstrings:examples_rimless_wheel",
+        "//bindings/generated_docstrings:examples_van_der_pol",
+        "//bindings/pydrake/common:deprecation_pybind",
+    ],
+    cc_so_name = "__init__",
+    cc_srcs = [
+        "examples_py.h",
+        "examples_py.cc",
+        "examples_py_acrobot.cc",
+        "examples_py_compass_gait.cc",
+        "examples_py_pendulum.cc",
+        "examples_py_quadrotor.cc",
+        "examples_py_rimless_wheel.cc",
+        "examples_py_van_der_pol.cc",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        "//bindings/pydrake/systems",
+    ],
+)
+
+PY_LIBRARIES_WITH_INSTALL = [
+    ":examples",
+    "//bindings/pydrake/examples/gym",
+    "//bindings/pydrake/examples/multibody",
+]
+
+install(
+    name = "install",
+    py_dest = PACKAGE_INFO.py_dest,
+    deps = get_drake_py_installs(PY_LIBRARIES_WITH_INSTALL),
+)
+
+drake_py_unittest(
+    name = "acrobot_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "compass_gait_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "pendulum_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "quadrotor_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "rimless_wheel_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "van_der_pol_test",
+    deps = [
+        ":examples",
+    ],
+)
+
+add_lint_tests_pydrake()

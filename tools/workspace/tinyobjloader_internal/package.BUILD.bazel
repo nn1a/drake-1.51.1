@@ -1,0 +1,29 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+load("@drake//tools/workspace:vendor_cxx.bzl", "cc_library_vendored")
+
+licenses(["notice"])  # MIT, ISC
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library_vendored(
+    name = "tinyobjloader",
+    srcs = ["tiny_obj_loader.cc"],
+    srcs_vendored = ["drake_src/tiny_obj_loader.cc"],
+    hdrs = ["tiny_obj_loader.h"],
+    hdrs_vendored = ["drake_src/tiny_obj_loader.h"],
+    defines = ["TINYOBJLOADER_USE_DOUBLE=1"],
+    includes = ["drake_src"],
+    isystem = True,
+    linkstatic = 1,
+)
+
+install(
+    name = "install",
+    docs = ["LICENSE"],
+)
+
+exports_files(["drake_repository_metadata.json"])

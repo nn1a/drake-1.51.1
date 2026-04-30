@@ -1,0 +1,63 @@
+load("//tools/install:install.bzl", "install")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:drake_cc.bzl", "drake_cc_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+drake_cc_binary(
+    name = "simple_continuous_time_system",
+    srcs = ["simple_continuous_time_system.cc"],
+    add_test_rule = 1,
+    deps = [
+        "//systems/analysis:simulator",
+        "//systems/framework:vector_system",
+    ],
+)
+
+drake_cc_binary(
+    name = "simple_discrete_time_system",
+    srcs = ["simple_discrete_time_system.cc"],
+    add_test_rule = 1,
+    deps = [
+        "//systems/analysis:simulator",
+        "//systems/framework:vector_system",
+    ],
+)
+
+drake_cc_binary(
+    name = "simple_mixed_continuous_and_discrete_time_system",
+    srcs = ["simple_mixed_continuous_and_discrete_time_system.cc"],
+    add_test_rule = 1,
+    deps = [
+        "//systems/analysis:simulator",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+# The :models in these packages are installed as part of the Drake release
+# process and loaded into //tools:meldis's model database by default.
+INSTALLED_MODEL_PACKAGES = [
+    "//examples/acrobot",
+    "//examples/kuka_iiwa_arm/models",
+    "//examples/multibody/cart_pole",
+    "//examples/pendulum",
+    "//examples/planar_gripper",
+    "//examples/quadrotor",
+]
+
+filegroup(
+    name = "models",
+    data = [package + ":models" for package in INSTALLED_MODEL_PACKAGES],
+    visibility = ["//visibility:public"],
+)
+
+install(
+    name = "install",
+    visibility = ["//visibility:public"],
+    deps = [
+        package + ":install_data"
+        for package in INSTALLED_MODEL_PACKAGES
+    ],
+)
+
+add_lint_tests()

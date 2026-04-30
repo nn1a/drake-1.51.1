@@ -1,0 +1,908 @@
+#include <limits>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "drake/common/drake_assert.h"
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
+#include "drake/common/test_utilities/expect_throws_message.h"
+#include "drake/geometry/drake_visualizer.h"
+#include "drake/geometry/proximity_properties.h"
+#include "drake/geometry/query_results/contact_surface.h"
+#include "drake/geometry/scene_graph.h"
+#include "drake/multibody/plant/contact_results.h"
+#include "drake/multibody/plant/contact_results_to_lcm.h"
+#include "drake/multibody/plant/hydroelastic_contact_forces_continuous_cache_data.h"
+#include "drake/multibody/plant/hydroelastic_contact_info.h"
+#include "drake/multibody/plant/multibody_plant.h"
+#include "drake/systems/analysis/simulator.h"
+#include "drake/systems/framework/diagram_builder.h"
+
+using drake::geometry::FrameId;
+using drake::geometry::GeometryId;
+using drake::geometry::ProximityProperties;
+using drake::geometry::SceneGraph;
+using drake::geometry::Sphere;
+using drake::math::RigidTransformd;
+using drake::systems::Context;
+using drake::systems::Diagram;
+using drake::systems::Simulator;
+using Eigen::Vector3d;
+using std::make_unique;
+using std::unique_ptr;
+
+namespace drake {
+namespace multibody {
+
+class MultibodyPlantTester {
+ public:
+  MultibodyPlantTester() = delete;
+
+  static const std::vector<SpatialForce<double>>&
+  EvalHydroelasticContactForcesContinuous(
+      const MultibodyPlant<double>& plant,
+      const systems::Context<double>& context) {
+    return plant.EvalHydroelasticContactForcesContinuous(context).F_BBo_W_array;
+  }
+
+  static BodyIndex FindBodyByGeometryId(const MultibodyPlant<double>& plant,
+                                        GeometryId id) {
+    return plant.FindBodyByGeometryId(id);
+  }
+
+  static const std::vector<SpatialForce<double>>&
+  EvalSpatialContactForcesContinuous(const MultibodyPlant<double>& plant,
+                                     const systems::Context<double>& context) {
+    return plant.EvalSpatialContactForcesContinuous(context);
+  }
+};
+
+namespace {
+
+// This fixture sets up a MultibodyPlant model of a compliant sphere and a
+// ground box to confirm that MBP computes the correct forces due to
+// hydroelastic contact. The box could be either rigid or compliant.
+class HydroelasticModelTests : public ::testing::Test {
+ protected:
+  enum class BoxType { kRigid, kCompliant };
+
+  // @param compliant_hydroelastic_modulus is required for the compliant box
+  //                                       but not the rigid box.
+  void SetUpModel(double mbp_dt, BoxType box_type,
+                  std::optional<double> compliant_box_hydroelastic_modulus) {
+    systems::DiagramBuilder<double> builder;
+    std::tie(plant_, scene_graph_) =
+        AddMultibodyPlantSceneGraph(&builder, mbp_dt);
+
+    AddGroundBox(kFrictionCoefficient, plant_, box_type,
+                 compliant_box_hydroelastic_modulus);
+    body_ = &AddObject(plant_, kSphereRadius, kElasticModulus, kDissipation,
+                       kFrictionCoefficient);
+
+    // The default contact model today is hydroelastic with fallback.
+    EXPECT_EQ(plant_->get_contact_model(),
+              ContactModel::kHydroelasticWithFallback);
+
+    // Tell the plant to use the hydroelastic model.
+    plant_->set_contact_model(ContactModel::kHydroelastic);
+    ASSERT_EQ(plant_->get_contact_model(), ContactModel::kHydroelastic);
+
+    plant_->Finalize();
+
+    // Connect visualizer. Useful for when this test is used for debugging.
+    drake::geometry::DrakeVisualizerd::AddToBuilder(&builder, *scene_graph_);
+    ConnectContactResultsToDrakeVisualizer(&builder, *plant_, *scene_graph_);
+
+    diagram_ = builder.Build();
+
+    // Create a context for this system:
+    diagram_context_ = diagram_->CreateDefaultContext();
+    plant_context_ =
+        &diagram_->GetMutableSubsystemContext(*plant_, diagram_context_.get());
+    scene_graph_context_ = &diagram_->GetMutableSubsystemContext(
+        *scene_graph_, diagram_context_.get());
+  }
+
+  // @param compliant_hydroelastic_modulus is required for the compliant box
+  //                                       but not the rigid box.
+  void AddGroundBox(double friction_coefficient, MultibodyPlant<double>* plant,
+                    BoxType box_type,
+                    std::optional<double> compliant_hydroelastic_modulus) {
+    const double kSize = 10;
+    const RigidTransformd X_WG{Vector3d{0, 0, -kSize / 2}};
+    const Vector4<double> green(0.5, 1.0, 0.5, 1.0);
+    geometry::Box ground = geometry::Box::MakeCube(kSize);
+    plant->RegisterVisualGeometry(plant->world_body(), X_WG, ground,
+                                  "GroundVisualGeometry", green);
+    geometry::ProximityProperties props;
+    if (box_type == BoxType::kRigid) {
+      geometry::AddRigidHydroelasticProperties(kSize, &props);
+    } else {
+      DRAKE_DEMAND(compliant_hydroelastic_modulus.has_value());
+      geometry::AddCompliantHydroelasticProperties(
+          kSize, compliant_hydroelastic_modulus.value(), &props);
+    }
+    geometry::AddContactMaterial(
+        {}, {},
+        CoulombFriction<double>(friction_coefficient, friction_coefficient),
+        &props);
+    plant->RegisterCollisionGeometry(plant->world_body(), X_WG, ground,
+                                     "GroundCollisionGeometry",
+                                     std::move(props));
+  }
+
+  const RigidBody<double>& AddObject(MultibodyPlant<double>* plant,
+                                     double radius, double hydroelastic_modulus,
+                                     double dissipation,
+                                     double friction_coefficient) {
+    // Inertial properties are only needed when verifying accelerations since
+    // hydro forces are only a function of state.
+    const SpatialInertia<double> M_BBcm =
+        SpatialInertia<double>::SolidSphereWithMass(kMass, radius);
+
+    // Create a rigid body B with the mass properties of a uniform sphere.
+    const RigidBody<double>& body = plant->AddRigidBody("body", M_BBcm);
+
+    // Body B's visual geometry and collision geometry are a sphere.
+    // The pose X_BG of block B's geometry frame G is an identity transform.
+    Sphere shape(radius);
+    const RigidTransformd X_BG;  // Identity transform.
+    const Vector4<double> lightBlue(0.5, 0.8, 1.0, 1.0);
+    plant->RegisterVisualGeometry(body, X_BG, shape, "BodyVisualGeometry",
+                                  lightBlue);
+
+    geometry::ProximityProperties props;
+    // This should produce a level-2 refinement (two steps beyond octahedron).
+    geometry::AddCompliantHydroelasticProperties(radius / 2,
+                                                 hydroelastic_modulus, &props);
+    geometry::AddContactMaterial(
+        dissipation, {},
+        CoulombFriction<double>(friction_coefficient, friction_coefficient),
+        &props);
+    plant->RegisterCollisionGeometry(body, X_BG, shape, "BodyCollisionGeometry",
+                                     std::move(props));
+    return body;
+  }
+
+  void SetPose(double penetration) {
+    RigidTransformd X_WB(Vector3d(0.0, 0.0, kSphereRadius - penetration));
+    plant_->SetFreeBodyPose(plant_context_, *body_, X_WB);
+  }
+
+  void SetVelocity(const SpatialVelocity<double>& V_WB) {
+    plant_->SetFreeBodySpatialVelocity(plant_context_, *body_, V_WB);
+  }
+
+  // This method computes the repulsion force between a compliant sphere and a
+  // rigid half-space as predicted by the hydroelastic contact model, when
+  // dissipation is zero. The integral is performed analytically. For this
+  // case, the extent field is specified to be e(r) = 1 - r / R, where `r` is
+  // the radial spherical coordinate and `R` is the radius of the sphere. For
+  // a given penetration distance d, the hydroelastic model predicts a contact
+  // patch of radius `a` which is the intersection of the sphere with the half
+  // space. Using trigonometry the contact patch radius is given by a² = d (2R -
+  // d). The normal force is then computed by integrating the pressure p(r) = E
+  // e(r) over the circular patch. Given the axial symmetry about the center of
+  // the patch, we can write this integral as:
+  //   P = 2π∫dρ⋅ρ⋅p(r(ρ))
+  // with `ρ` the radial (2D) coordinate in the patch and `r` as before the
+  // spherical coordinate. Since `ρ` and `r` are related by ρ² + (R - d)² = r²
+  // we can perform the integral in either variable `ρ` or `r`.
+  // The result is:
+  //   P = π/3⋅E⋅d²(3 - 2d/R)
+  // with a² = d (2R - d) the contact patch radius.
+  double CalcAnalyticalHydroelasticsForce(double d) {
+    DRAKE_DEMAND(0.0 <= d);
+    // The patch radius predicted by the hydroelastic model.
+    const double normal_force =
+        M_PI / 3.0 * kElasticModulus * d * d * (3 - 2 * d / kSphereRadius);
+    return normal_force;
+  }
+
+  // Runs the model of the sphere lying on the ground for long enough to
+  // reach a steady state in which the hydroelastic forces balance the
+  // weight of the sphere.
+  // @param[out] p_WB_W   The position of the sphere.
+  // @param[out] F_BBo_W  The contact force on the sphere balancing gravity,
+  //                      which is typically parallel to Wz direction.
+  void RunDiscreteTamsiSolver(SpatialForce<double>* F_BBo_W,
+                              Vector3<double>* p_WB_W) {
+    DRAKE_DEMAND(F_BBo_W != nullptr);
+    DRAKE_DEMAND(p_WB_W != nullptr);
+
+    Simulator<double> simulator(*diagram_);
+    auto& diagram_context = simulator.get_mutable_context();
+    auto& plant_context = plant_->GetMyMutableContextFromRoot(&diagram_context);
+
+    // Set initial condition.
+    plant_->SetFreeBodyPose(&plant_context, *body_,
+                            RigidTransformd(Vector3d(0.0, 0.0, kSphereRadius)));
+    diagram_->ForcedPublish(diagram_context);
+
+    // Run simulation for long enough to reach the steady state.
+    simulator.AdvanceTo(0.5);
+
+    // Compute the position of the sphere in world.
+    const RigidTransformd& X_WB =
+        plant_->GetFreeBodyPose(plant_context, *body_);
+    *p_WB_W = X_WB.translation();
+
+    // Loop over each contact surface involving `body_` and sum the contact
+    // forces acting on `body_`.
+    F_BBo_W->SetZero();
+    const ContactResults<double>& results =
+        plant_->get_contact_results_output_port().Eval<ContactResults<double>>(
+            plant_context);
+
+    ASSERT_EQ(results.num_point_pair_contacts(), 0);
+
+    for (int i = 0; i < results.num_hydroelastic_contacts(); ++i) {
+      const HydroelasticContactInfo<double>& info =
+          results.hydroelastic_contact_info(i);
+      const geometry::ContactSurface<double>& surface = info.contact_surface();
+      const GeometryId geometryM_id = surface.id_M();
+      const GeometryId geometryN_id = surface.id_N();
+
+      const BodyIndex bodyA_index =
+          MultibodyPlantTester::FindBodyByGeometryId(*plant_, geometryM_id);
+      const BodyIndex bodyB_index =
+          MultibodyPlantTester::FindBodyByGeometryId(*plant_, geometryN_id);
+
+      const Vector3<double> p_CBo_W = *p_WB_W - surface.centroid();
+      if (bodyA_index == body_->index()) {
+        *F_BBo_W += info.F_Ac_W().Shift(p_CBo_W);
+      } else if (bodyB_index == body_->index()) {
+        *F_BBo_W -= info.F_Ac_W().Shift(p_CBo_W);
+      }
+    }
+  }
+
+  const double kFrictionCoefficient{0.5};  // [-]
+  const double kSphereRadius{0.05};        // [m]
+  const double kElasticModulus{1.e5};      // [Pa]
+  // A non-zero dissipation value is used to quickly dissipate energy in tests
+  // running a simulation on this case.
+  const double kDissipation{10.0};  // [s/m]
+  const double kMass{1.2};          // [kg]
+
+  MultibodyPlant<double>* plant_{nullptr};
+  SceneGraph<double>* scene_graph_{nullptr};
+  const RigidBody<double>* body_{nullptr};
+  unique_ptr<Diagram<double>> diagram_;
+  unique_ptr<Context<double>> diagram_context_;
+  Context<double>* plant_context_{nullptr};
+  Context<double>* scene_graph_context_{nullptr};
+};
+
+// This test verifies the value of the normal force computed numerically using
+// the hydroelastic model implementation in Drake against an analytically
+// computed force with the same model.
+// We observed that the results do converge to the analytical solution as the
+// mesh is refined, however we cannot yet show this in a test given we still do
+// not have a way to specify a refinement level.
+// However, the main purpose of this test is to verify that MultibodyPlant is
+// properly wired with HydroelasticEngine. Correctness of the numerical
+// computation of contact forces can be found in hydroelastic_traction_test.cc.
+// TODO(amcastro-tri): Extend this test to verify convergence on mesh refinement
+// once we have the capability to specify mesh refinement.
+TEST_F(HydroelasticModelTests, ContactForce) {
+  SetUpModel(0.0, BoxType::kRigid, std::nullopt);
+  auto calc_force = [this](double penetration) -> double {
+    SetPose(penetration);
+    const auto& F_BBo_W_array =
+        MultibodyPlantTester::EvalHydroelasticContactForcesContinuous(
+            *plant_, *plant_context_);
+    const SpatialForce<double>& F_BBo_W = F_BBo_W_array[body_->mobod_index()];
+    return F_BBo_W.translational()[2];  // Normal force.
+  };
+
+  // We observed that the difference between the numerically computed
+  // hydroelastic forces and the analytically computed hydroelastic force is
+  // larger at smaller penetrations. This trend is expected since for a
+  // tessellation of the sphere smaller patches are not as accurately resolved
+  // as the larger patches which arise at greater penetration distances.
+  // This trend was measured and captured in this lambda; the error at d = 0.01
+  // is less than 25% while it goes below 15% at d = 0.04. (Note: this is
+  // sensitive to mesh refinement; a coarser mesh is likely to fail this test.)
+  auto calc_observed_percentile_error =
+      [R = kSphereRadius](double penetration) {
+        return 27.5 - 10 / 0.6 * penetration / R;
+      };
+
+  for (const double extent : {0.2, 0.4, 0.6, 0.8}) {
+    const double penetration = extent * kSphereRadius;
+    const double analytical_force =
+        CalcAnalyticalHydroelasticsForce(penetration);
+    const double numerical_force = calc_force(penetration);
+    const double percentile_error =
+        (analytical_force - numerical_force) / analytical_force;
+    const double observed_percentile_error =
+        calc_observed_percentile_error(penetration);
+    // We expect the numerical results to be smaller than the analytical ones
+    // since the tessellated sphere has a volume always smaller than the true
+    // sphere.
+    EXPECT_GT(percentile_error, 0.0);
+    EXPECT_LT(percentile_error, observed_percentile_error);
+  }
+}
+
+// The computation of hydroelastic forces and the effect external forces have on
+// accelerations is tested elsewhere. This test merely verifies the proper
+// wiring of the hydroelastic model into the computation of accelerations.
+// Therefore we only test the acceleration of the CoM and ignore angular
+// accelerations.
+TEST_F(HydroelasticModelTests, ContactDynamics) {
+  SetUpModel(0.0, BoxType::kRigid, std::nullopt);
+  const double penetration = 0.02;
+  SetPose(penetration);
+  const auto& F_BBo_W_array =
+      MultibodyPlantTester::EvalHydroelasticContactForcesContinuous(
+          *plant_, *plant_context_);
+  const SpatialForce<double>& F_BBo_W = F_BBo_W_array[body_->mobod_index()];
+  // Contact force by hydroelastics.
+  const Vector3<double> fhydro_BBo_W = F_BBo_W.translational();
+
+  auto derivatives = plant_->AllocateTimeDerivatives();
+  plant_->CalcTimeDerivatives(*plant_context_, derivatives.get());
+  const VectorX<double> vdot =
+      derivatives->get_generalized_velocity().CopyToVector();
+  std::vector<SpatialAcceleration<double>> A_WBo(plant_->num_bodies());
+  plant_->CalcSpatialAccelerationsFromVdot(*plant_context_, vdot, &A_WBo);
+  // Translational acceleration of Bo.
+  const Vector3<double> a_WBo = A_WBo[body_->index()].translational();
+
+  // Expected acceleration, including gravity.
+  const Vector3<double> a_WBo_expected =
+      fhydro_BBo_W / kMass + plant_->gravity_field().gravity_vector();
+  EXPECT_TRUE(CompareMatrices(a_WBo_expected, a_WBo,
+                              40 * std::numeric_limits<double>::epsilon()));
+}
+
+// This tests that a change in ProximityParameters (hydroelastic_modulus,
+// dissipation, friction, etc.) made in SceneGraph propagate through MbP hydro
+// computations.
+TEST_F(HydroelasticModelTests, Parameters) {
+  SetUpModel(0.0, BoxType::kRigid, std::nullopt);
+  const double penetration = 0.02;
+  const double vx = 0.01;
+  const double vy = 0.03;
+  SetPose(penetration);
+  SetVelocity(SpatialVelocity<double>(Vector3d::Zero(), Vector3d(vx, vy, 0)));
+
+  // Grab the initial ("old") properties.
+  const std::vector<geometry::GeometryId>& g_ids =
+      plant_->GetCollisionGeometriesForBody(*body_);
+  ASSERT_EQ(g_ids.size(), 1);
+  GeometryId gid = g_ids[0];
+  const ProximityProperties* old_props =
+      scene_graph_->model_inspector().GetProximityProperties(gid);
+  ASSERT_TRUE(old_props != nullptr);
+
+  // Calculate the initial ("old") contact results.
+  const ContactResults<double> old_contact_results =
+      plant_->get_contact_results_output_port()
+          .template Eval<ContactResults<double>>(*plant_context_);
+
+  // Change the friction property ("new").
+  ProximityProperties new_props(*old_props);
+  new_props.UpdateProperty(geometry::internal::kMaterialGroup,
+                           geometry::internal::kFriction,
+                           CoulombFriction<double>(5.0, 5.0));
+  scene_graph_->AssignRole(scene_graph_context_,
+                           plant_->get_source_id().value(), gid, new_props,
+                           geometry::RoleAssign::kReplace);
+
+  // Calculate the revised ("new") contact results.
+  const ContactResults<double> new_contact_results =
+      plant_->get_contact_results_output_port()
+          .template Eval<ContactResults<double>>(*plant_context_);
+
+  // The force should have changed.
+  ASSERT_EQ(old_contact_results.num_hydroelastic_contacts(),
+            new_contact_results.num_hydroelastic_contacts());
+  for (int i = 0; i < new_contact_results.num_hydroelastic_contacts(); ++i) {
+    const HydroelasticContactInfo<double>& old_contact_info =
+        old_contact_results.hydroelastic_contact_info(i);
+    const HydroelasticContactInfo<double>& new_contact_info =
+        new_contact_results.hydroelastic_contact_info(i);
+    EXPECT_NE(new_contact_info.F_Ac_W().get_coeffs(),
+              old_contact_info.F_Ac_W().get_coeffs());
+  }
+}
+
+// Verify the results of a simulation using the discrete approximation of
+// hydroelastics.
+TEST_F(HydroelasticModelTests, DiscreteTamsiSolverRigidCompliant) {
+  SetUpModel(5.0e-3, BoxType::kRigid, std::nullopt);
+
+  SpatialForce<double> F_BBo_W;
+  Vector3<double> p_WB_W;
+  RunDiscreteTamsiSolver(&F_BBo_W, &p_WB_W);
+
+  // Check the force.
+  const Vector3<double> f_BBo_W = F_BBo_W.translational();
+  // The contact force should match the weight of the sphere.
+  const Vector3<double> f_BBo_W_expected =
+      -plant_->gravity_field().gravity_vector() * kMass;
+  // The accuracy of these results scales proportionally with the relative
+  // tolerance used by the (default) SAP solver.
+  const double tolerance = 1.0e-6;
+  EXPECT_TRUE(CompareMatrices(f_BBo_W, f_BBo_W_expected, tolerance,
+                              MatrixCompareType::relative));
+}
+
+// Tests that "very stiff" compliant hydroelastics converge to rigid
+// hydroelastics. First we run a typical rigid box contacting a typical
+// compliant sphere. Then, we run a stiff compliant box (very high
+// hydroelastic modulus) contacting a typical compliant sphere. We show both
+// cases give similar result after a significant simulated time.
+TEST_F(HydroelasticModelTests,
+       DiscreteTamsiSolverCompliantCompliantConsistentWithRigidCompliant) {
+  SpatialForce<double> rigid_compliant_F_BBo_W;
+  Vector3<double> rigid_compliant_p_WB_W;
+  {
+    SetUpModel(5.0e-3, BoxType::kRigid, std::nullopt);
+    RunDiscreteTamsiSolver(&rigid_compliant_F_BBo_W, &rigid_compliant_p_WB_W);
+  }
+
+  SpatialForce<double> compliant_compliant_F_BBo_W;
+  Vector3<double> compliant_compliant_p_WB_W;
+  {
+    // Use very high hydroelastic modulus to mimic the rigid box.
+    const double box_compliant_hydroelastic_modulus = 1e14;
+    SetUpModel(5.0e-3, BoxType::kCompliant, box_compliant_hydroelastic_modulus);
+    RunDiscreteTamsiSolver(&compliant_compliant_F_BBo_W,
+                           &compliant_compliant_p_WB_W);
+  }
+
+  EXPECT_TRUE(CompareMatrices(compliant_compliant_p_WB_W,
+                              rigid_compliant_p_WB_W, 2.0e-8));
+}
+
+// This tests consistency across the ContactModel modes: point pair,
+// hydroelastic only, and hydroelastic with fallback. We create a scenario with
+// three objects: two rigid spheres and a soft box. One rigid sphere is in
+// contact with the other two shapes. In this scenario:
+//   - Evaluating with point pair produces two contact forces on the common
+//     rigid sphere.
+//   - Evaluating with hydroelastic only should throw (rigid-rigid contact
+//     is not supported).
+//   - Evaluating with hydroelastic with fallback should produce a point contact
+//     and a contact surface contact.
+// In this case, we'll query the plant for both the contact results and the
+// spatial contact forces. They should match and show the heterogeneity of
+// contact types (as appropriate).
+class ContactModelTest : public ::testing::Test {
+ protected:
+  // Sets up a system consisting of two rigid balls and a compliant box.
+  // @param connect_scene_graph
+  //                   For testing error handling when SceneGraph is added but
+  //                   not connected to MultibodyPlant. Set to true for the
+  //                   usual operation. Set to false to test the error handling.
+  // @param time_step  Set to 0 to set up a continuous system and
+  //                   non-zero to set up a discrete system.
+  // @param are_rigid_spheres_in_contact
+  //                   Set to true to have a rigid-rigid contact between two
+  //                   balls and a rigid-compliant contact between the rigid
+  //                   ball and a compliant box. Set to false to have only the
+  //                   rigid-compliant contact between a rigid ball and a
+  //                   compliant box, and the two rigid balls will be too far
+  //                   apart to make contact.
+  void Configure(ContactModel model, bool connect_scene_graph = true,
+                 double time_step = 0.0,
+                 bool are_rigid_spheres_in_contact = true) {
+    systems::DiagramBuilder<double> builder;
+    if (connect_scene_graph) {
+      std::tie(plant_, scene_graph_) =
+          AddMultibodyPlantSceneGraph(&builder, time_step);
+    } else {
+      // Even though we add a SceneGraph, with this option we leave it
+      // disconnected so that we can test the correct throw message
+      // from:
+      // TEST_F(ContactModelTest, HydroelasticWithFallbackDisconnectedPorts).
+      plant_ = builder.AddSystem(
+          std::make_unique<MultibodyPlant<double>>(time_step));
+      scene_graph_ = builder.AddSystem(std::make_unique<SceneGraph<double>>());
+      plant_->RegisterAsSourceForSceneGraph(scene_graph_);
+    }
+    plant_->SetUseSampledOutputPorts(false);  // We're not stepping time.
+
+    geometry::ProximityProperties props;
+    geometry::AddContactMaterial(
+        kDissipation, {},
+        CoulombFriction<double>(kFrictionCoefficient, kFrictionCoefficient),
+        &props);
+    AddGround(props, plant_);
+
+    // Although we're providing elastic modulus and dissipation for the rigid
+    // spheres, those values will be ignored.
+    first_ball_ = &AddSphere("sphere1", kSphereRadius, props, plant_);
+    second_ball_ = &AddSphere("sphere2", kSphereRadius, props, plant_);
+
+    // Tell the plant to use the given model.
+    plant_->set_contact_model(model);
+    ASSERT_EQ(plant_->get_contact_model(), model);
+
+    // Optionally tweak the contact surface representation.
+    if (forced_hydroelastic_contact_representation_.has_value()) {
+      plant_->set_contact_surface_representation(
+          *forced_hydroelastic_contact_representation_);
+    }
+
+    plant_->Finalize();
+
+    diagram_ = builder.Build();
+
+    // Create a context for this system:
+    diagram_context_ = diagram_->CreateDefaultContext();
+    plant_context_ =
+        &diagram_->GetMutableSubsystemContext(*plant_, diagram_context_.get());
+
+    // Pose the ball.
+    RigidTransformd X_WS1{Vector3d{0.0, 0.0, kSphereRadius * 0.9}};
+    plant_->SetFreeBodyPose(plant_context_, *first_ball_, X_WS1);
+    RigidTransformd X_WS2{Vector3d{0.0, 0.0, 2 * kSphereRadius}};
+    if (!are_rigid_spheres_in_contact) {
+      X_WS2 = RigidTransformd(100.0 * kSphereRadius * Vector3d::UnitZ());
+    }
+    plant_->SetFreeBodyPose(plant_context_, *second_ball_, X_WS2);
+  }
+
+  void AddGround(geometry::ProximityProperties contact_material,
+                 MultibodyPlant<double>* plant) {
+    const double kSize = 10;
+    const RigidTransformd X_WG{Vector3d{0, 0, -kSize / 2}};
+    geometry::Box ground = geometry::Box::MakeCube(kSize);
+    geometry::AddCompliantHydroelasticProperties(kSize, kElasticModulus,
+                                                 &contact_material);
+    plant->RegisterCollisionGeometry(plant->world_body(), X_WG, ground,
+                                     "GroundCollisionGeometry",
+                                     std::move(contact_material));
+  }
+
+  const RigidBody<double>& AddSphere(
+      const std::string& name, double radius,
+      geometry::ProximityProperties contact_material,
+      MultibodyPlant<double>* plant) {
+    // Inertial properties are only needed when verifying accelerations since
+    // hydro forces are only a function of state.
+    const SpatialInertia<double> M_BBcm =
+        SpatialInertia<double>::SolidSphereWithMass(kMass, radius);
+
+    // Create a rigid body B with the mass properties of a uniform sphere.
+    const RigidBody<double>& body = plant->AddRigidBody(name, M_BBcm);
+
+    // Body B's collision geometry is a sphere.
+    // The pose X_BG of block B's geometry frame G is an identity transform.
+    Sphere shape(radius);
+    const RigidTransformd X_BG;  // Identity transform.
+    geometry::AddRigidHydroelasticProperties(radius, &contact_material);
+    plant->RegisterCollisionGeometry(body, X_BG, shape, "collision",
+                                     std::move(contact_material));
+    return body;
+  }
+
+  // Compute a set of spatial forces from the given contact results. The
+  // translational component of the force acting on a body is defined to be
+  // acting at the _origin_ of the body.
+  // This method is used to compute an expected result from
+  // MultibodyPlant::EvalSpatialContactForcesContinuous() from contact results.
+  // EvalSpatialContactForcesContinuous() is an internal private method of
+  // MultibodyPlant and, as many other multibody methods, sorts the results in
+  // the returned array of spatial forces by MobodIndex. Therefore, the
+  // expected results being generated must also be sorted by MobodIndex.
+  std::vector<SpatialForce<double>> SpatialForceFromContactResults(
+      const ContactResults<double>& contacts) {
+    std::vector<SpatialForce<double>> F_BBo_W_array(
+        plant_->num_bodies(),
+        SpatialForce<double>{Vector3d::Zero(), Vector3d::Zero()});
+
+    for (int i = 0; i < contacts.num_point_pair_contacts(); ++i) {
+      const auto& contact_info = contacts.point_pair_contact_info(i);
+      const SpatialForce<double> F_Bc_W{Vector3d::Zero(),
+                                        contact_info.contact_force()};
+      const Vector3d& p_WC = contact_info.contact_point();
+      const auto& bodyA = plant_->get_body(contact_info.bodyA_index());
+      const Vector3d& p_WAo =
+          bodyA.EvalPoseInWorld(*plant_context_).translation();
+      const Vector3d& p_CAo_W = p_WAo - p_WC;
+      const auto& bodyB = plant_->get_body(contact_info.bodyB_index());
+      const Vector3d& p_WBo =
+          bodyB.EvalPoseInWorld(*plant_context_).translation();
+      const Vector3d& p_CBo_W = p_WBo - p_WC;
+
+      // N.B. Since we are using this method to test the internal (private)
+      // MultibodyPlant::EvalSpatialContactForcesContinuous(), we must use
+      // internal API to generate a forces vector sorted in the same way, by
+      // internal::MobodIndex.
+      F_BBo_W_array[bodyB.mobod_index()] += F_Bc_W.Shift(p_CBo_W);
+      F_BBo_W_array[bodyA.mobod_index()] -= F_Bc_W.Shift(p_CAo_W);
+    }
+
+    for (int i = 0; i < contacts.num_hydroelastic_contacts(); ++i) {
+      const auto& contact_info = contacts.hydroelastic_contact_info(i);
+      const auto& surface = contact_info.contact_surface();
+      const auto& inspector = scene_graph_->model_inspector();
+
+      const GeometryId A_id = surface.id_M();
+      const FrameId fA_id = inspector.GetFrameId(A_id);
+      const RigidBody<double>& body_A = *plant_->GetBodyFromFrameId(fA_id);
+      const GeometryId B_id = surface.id_N();
+      const FrameId fB_id = inspector.GetFrameId(B_id);
+      const RigidBody<double>& body_B = *plant_->GetBodyFromFrameId(fB_id);
+
+      const Vector3d& p_WC = surface.centroid();
+      const Vector3d& p_WAo =
+          body_A.EvalPoseInWorld(*plant_context_).translation();
+      const Vector3d p_CAo_W = p_WAo - p_WC;
+      const Vector3d& p_WBo =
+          body_B.EvalPoseInWorld(*plant_context_).translation();
+      const Vector3d p_CBo_W = p_WBo - p_WC;
+
+      // The force applied to body A at a fixed point coincident with the
+      // centroid point C.
+      const SpatialForce<double>& F_Ac_W = contact_info.F_Ac_W();
+      F_BBo_W_array[body_A.mobod_index()] += F_Ac_W.Shift(p_CAo_W);
+      F_BBo_W_array[body_B.mobod_index()] -= F_Ac_W.Shift(p_CBo_W);
+    }
+
+    return F_BBo_W_array;
+  }
+
+  // Get the contact results from the plant (calculating them as necessary).
+  const ContactResults<double>& GetContactResults() const {
+    return plant_->get_contact_results_output_port()
+        .Eval<ContactResults<double>>(*plant_context_);
+  }
+
+  const double kFrictionCoefficient{0.0};  // [-]
+  const double kSphereRadius{0.05};        // [m]
+  const double kElasticModulus{1.e5};      // [Pa]
+  const double kDissipation{0.0};          // [s/m]
+  const double kMass{1.2};                 // [kg]
+
+  // When non-null, the plant will be forced to use this representation instead
+  // of its natural time_step-based default.
+  std::optional<geometry::HydroelasticContactRepresentation>
+      forced_hydroelastic_contact_representation_;
+
+  MultibodyPlant<double>* plant_{nullptr};
+  SceneGraph<double>* scene_graph_{nullptr};
+  const RigidBody<double>* first_ball_{nullptr};
+  const RigidBody<double>* second_ball_{nullptr};
+  unique_ptr<Diagram<double>> diagram_;
+  unique_ptr<Context<double>> diagram_context_;
+  Context<double>* plant_context_{nullptr};
+};
+
+TEST_F(ContactModelTest, PointPairContact) {
+  this->Configure(ContactModel::kPoint);
+  const ContactResults<double>& contact_results = GetContactResults();
+  ASSERT_EQ(contact_results.num_point_pair_contacts(), 2);
+  ASSERT_EQ(contact_results.num_hydroelastic_contacts(), 0);
+
+  std::vector<SpatialForce<double>> F_BBo_W_array_expected =
+      this->SpatialForceFromContactResults(contact_results);
+
+  const std::vector<SpatialForce<double>>& F_BBo_W_array =
+      MultibodyPlantTester::EvalSpatialContactForcesContinuous(*plant_,
+                                                               *plant_context_);
+  EXPECT_EQ(F_BBo_W_array.size(), plant_->num_bodies());
+  // Note: We're skipping the _world_ body; EvalSpatialContactForcesContinuous()
+  // reports zero spatial force for the world body. (This ultimately comes from
+  // the implementation of MBP::CalcAndAddContactForcesByPenaltyMethod().)
+  for (int b = 1; b < plant_->num_bodies(); ++b) {
+    // Confirm that we don't trivially have matching zero-magnitude forces.
+    EXPECT_GT(F_BBo_W_array[b].get_coeffs().norm(), 0);
+    EXPECT_TRUE(CompareMatrices(F_BBo_W_array[b].get_coeffs(),
+                                F_BBo_W_array_expected[b].get_coeffs()));
+  }
+}
+
+TEST_F(ContactModelTest, HydroelasticOnly) {
+  this->Configure(ContactModel::kHydroelastic);
+  // Rigid-rigid contact precludes successful evaluation.
+  DRAKE_EXPECT_THROWS_MESSAGE(GetContactResults(),
+                              "Requested contact between two rigid objects .+");
+}
+
+TEST_F(ContactModelTest, HydroelasticWithFallback) {
+  this->Configure(ContactModel::kHydroelasticWithFallback);
+  const ContactResults<double>& contact_results = GetContactResults();
+  EXPECT_EQ(contact_results.num_point_pair_contacts(), 1);
+  EXPECT_EQ(contact_results.num_hydroelastic_contacts(), 1);
+
+  std::vector<SpatialForce<double>> F_BBo_W_array_expected =
+      this->SpatialForceFromContactResults(contact_results);
+
+  const std::vector<SpatialForce<double>>& F_BBo_W_array =
+      MultibodyPlantTester::EvalSpatialContactForcesContinuous(*plant_,
+                                                               *plant_context_);
+  EXPECT_EQ(F_BBo_W_array.size(), plant_->num_bodies());
+  // Note: We're skipping the _world_ body; EvalSpatialContactForcesContinuous()
+  // reports zero spatial force for the world body. (This ultimately comes from
+  // the implementation of MBP::CalcAndAddContactForcesByPenaltyMethod().)
+  for (int b = 1; b < plant_->num_bodies(); ++b) {
+    // Confirm that we don't trivially have matching zero-magnitude forces.
+    EXPECT_GT(F_BBo_W_array[b].get_coeffs().norm(), 0);
+    EXPECT_TRUE(CompareMatrices(F_BBo_W_array[b].get_coeffs(),
+                                F_BBo_W_array_expected[b].get_coeffs()));
+  }
+}
+
+TEST_F(ContactModelTest, RejectPostFinalizeChange) {
+  this->Configure(ContactModel::kHydroelastic);
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      plant_->set_contact_surface_representation(
+          geometry::HydroelasticContactRepresentation::kPolygon),
+      ".*set_contact_surface_representation.*before Finalize.*");
+}
+
+// TODO(DamrongGuoy): Create an independent test fixture instead of using
+//  inheritance and consider using parameter-value tests.
+
+// Tests MultibodyPlant::CalcContactSurfaces() which is used in
+// kHydroelastic contact model for both continuous systems and discrete
+// systems.
+//
+// This fixture sets up only rigid-compliant contact without rigid-rigid
+// contact.
+class CalcContactSurfacesTest : public ContactModelTest {
+ protected:
+  // @param time_step   Set to 0 to select a continuous system, and non-zero
+  //                    for a discrete system. The actual non-zero value is not
+  //                    relevant because we are not doing time stepping.
+  void Configure(double time_step) {
+    const bool connect_scene_graph = true;
+    // No rigid-rigid contact. Only the rigid-compliant contact.
+    bool are_rigid_spheres_in_contact = false;
+    ContactModelTest::Configure(ContactModel::kHydroelastic,
+                                connect_scene_graph, time_step,
+                                are_rigid_spheres_in_contact);
+  }
+
+  void RunTest(geometry::HydroelasticContactRepresentation expected_rep) {
+    const ContactResults<double>& contact_results = GetContactResults();
+
+    EXPECT_EQ(contact_results.num_point_pair_contacts(), 0);
+    EXPECT_EQ(contact_results.num_hydroelastic_contacts(), 1);
+    EXPECT_TRUE(
+        contact_results.hydroelastic_contact_info(0).contact_surface().Equal(
+            plant_->get_geometry_query_input_port()
+                .template Eval<geometry::QueryObject<double>>(*plant_context_)
+                .ComputeContactSurfaces(expected_rep)
+                .at(0)));
+  }
+};
+
+TEST_F(CalcContactSurfacesTest, ContinuousSystem_Triangles) {
+  const double time_step = 0.0;  // Zero to select continuous system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("continuous system hydro: triangle rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kTriangle);
+}
+
+TEST_F(CalcContactSurfacesTest, ContinuousSystem_Polygons) {
+  forced_hydroelastic_contact_representation_ =
+      geometry::HydroelasticContactRepresentation::kPolygon;
+
+  const double time_step = 0.0;  // Zero to select continuous system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("continuous system hydro: polygon rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kPolygon);
+}
+
+TEST_F(CalcContactSurfacesTest, DiscreteSystem_Polygons) {
+  const double time_step = 5.0e-3;  // Non-zero to select discrete system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("discrete system hydro: polygon rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kPolygon);
+}
+
+TEST_F(CalcContactSurfacesTest, DiscreteSystem_Triangles) {
+  forced_hydroelastic_contact_representation_ =
+      geometry::HydroelasticContactRepresentation::kTriangle;
+
+  const double time_step = 5.0e-3;  // Non-zero to select discrete system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("discrete system hydro: triangle rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kTriangle);
+}
+
+// TODO(DamrongGuoy): Create an independent test fixture instead of using
+//  inheritance and consider using parameter-value tests.
+
+// Tests MultibodyPlant::CalcHydroelasticWithFallback() which is used in
+// kHydroelasticWithFallback contact model for both continuous systems and
+// discrete systems.
+//
+// This fixture sets up both rigid-compliant contact and rigid-rigid
+// contact.
+class CalcHydroelasticWithFallbackTest : public CalcContactSurfacesTest {
+ protected:
+  // @param time_step   Set to 0 to select a continuous system, and non-zero
+  //                    for a discrete system. The actual non-zero value is not
+  //                    relevant because we are not doing time stepping.
+  void Configure(double time_step) {
+    const bool connect_scene_graph = true;
+    // Get both the rigid-rigid-sphere contact and the rigid-compliant
+    // sphere-box contact.
+    bool are_rigid_spheres_in_contact = true;
+    ContactModelTest::Configure(ContactModel::kHydroelasticWithFallback,
+                                connect_scene_graph, time_step,
+                                are_rigid_spheres_in_contact);
+  }
+
+  void RunTest(geometry::HydroelasticContactRepresentation expected_rep) {
+    const ContactResults<double>& contact_results = GetContactResults();
+
+    std::vector<geometry::ContactSurface<double>> expected_surfaces;
+    std::vector<geometry::PenetrationAsPointPair<double>> expected_point_pairs;
+    plant_->get_geometry_query_input_port()
+        .template Eval<geometry::QueryObject<double>>(*plant_context_)
+        .ComputeContactSurfacesWithFallback(expected_rep, &expected_surfaces,
+                                            &expected_point_pairs);
+
+    // We only check the penetration depth as an evidence that the tested
+    // result is what expected.
+    EXPECT_EQ(contact_results.num_point_pair_contacts(), 1);
+    EXPECT_EQ(contact_results.point_pair_contact_info(0).point_pair().depth,
+              expected_point_pairs.at(0).depth);
+
+    EXPECT_EQ(contact_results.num_hydroelastic_contacts(), 1);
+    EXPECT_TRUE(
+        contact_results.hydroelastic_contact_info(0).contact_surface().Equal(
+            expected_surfaces.at(0)));
+  }
+};
+
+TEST_F(CalcHydroelasticWithFallbackTest, ContinuousSystem_Triangles) {
+  const double time_step = 0.0;  // Zero to select continuous system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("continuous system hydro with fallback: triangle rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kTriangle);
+}
+
+TEST_F(CalcHydroelasticWithFallbackTest, ContinuousSystem_Polygons) {
+  forced_hydroelastic_contact_representation_ =
+      geometry::HydroelasticContactRepresentation::kPolygon;
+
+  const double time_step = 0.0;  // Zero to select continuous system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("continuous system hydro with fallback: polygon rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kPolygon);
+}
+
+TEST_F(CalcHydroelasticWithFallbackTest, DiscreteSystem_Polygons) {
+  const double time_step = 5.0e-3;  // Non-zero to select discrete system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("discrete system hydro with fallback: polygon rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kPolygon);
+}
+
+TEST_F(CalcHydroelasticWithFallbackTest, DiscreteSystem_Triangles) {
+  forced_hydroelastic_contact_representation_ =
+      geometry::HydroelasticContactRepresentation::kTriangle;
+
+  const double time_step = 5.0e-3;  // Non-zero to select discrete system.
+  this->Configure(time_step);
+
+  SCOPED_TRACE("discrete system hydro with fallback: triangle rep");
+  this->RunTest(geometry::HydroelasticContactRepresentation::kTriangle);
+}
+
+}  // namespace
+}  // namespace multibody
+}  // namespace drake

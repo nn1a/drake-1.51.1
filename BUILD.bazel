@@ -1,0 +1,193 @@
+# This file is named BUILD.bazel instead of the more typical BUILD, so that on
+# OSX it won't conflict with a build artifacts directory named "build".
+
+load("//tools/install:install.bzl", "install", "install_test")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:drake_py.bzl", "drake_py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+exports_files([
+    "CPPLINT.cfg",
+    ".bazelproject",
+    ".clang-format",
+    ".drake-find_resource-sentinel",
+    ".ruff.toml",
+    "package.xml",
+])
+
+exports_files(
+    [
+        "MODULE.bazel",
+        "cmake/MODULE.bazel.in",
+    ],
+    visibility = ["//tools/workspace:__pkg__"],
+)
+
+# A legacy hack module to disambiguate the 'drake' module when Drake is being
+# used as a non-bzlmod external. We should remove this when we drop support for
+# WORKSPACE (i.e., Bazel >= 9).
+drake_py_library(
+    name = "module_py",
+    srcs = ["__init__.py"],
+    visibility = ["//lcmtypes:__pkg__"],
+)
+
+# Expose shared library for (a) installed binaries, (b) Drake Python bindings,
+# and (c) downstream C++ libraries which will also provide Python bindings.
+alias(
+    name = "drake_shared_library",
+    actual = "//tools/install/libdrake:drake_shared_library",
+    visibility = ["//visibility:public"],
+)
+
+# A manually-curated collection of most model files in Drake, so that we can
+# easily provide access to them for tools like //tools:model_visualizer.
+filegroup(
+    name = "all_models",
+    data = [
+        "//bindings/pydrake/multibody:models",
+        "//examples/acrobot:models",
+        "//examples/hardware_sim:demo_data",
+        "//examples/hydroelastic/ball_plate:models",
+        "//examples/hydroelastic/python_ball_paddle:models",
+        "//examples/hydroelastic/python_nonconvex_mesh:models",
+        "//examples/hydroelastic/spatula_slip_control:models",
+        "//examples/kuka_iiwa_arm/models",
+        "//examples/multibody/cart_pole:models",
+        "//examples/multibody/deformable:models",
+        "//examples/multibody/four_bar:models",
+        "//examples/pendulum:models",
+        "//examples/planar_gripper:models",
+        "//examples/quadrotor:models",
+        "//examples/scene_graph:models",
+        "//examples/simple_gripper:models",
+        "//multibody/benchmarks/acrobot:models",
+        "@drake_models",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+# A manually-curated collection of some test model files in Drake, for use by
+# //tools:model_visualizer_private.
+filegroup(
+    name = "some_test_models",
+    testonly = True,
+    data = [
+        # It's okay to add more items to this list, as needed.
+        "//geometry/render:test_models",
+        "//manipulation/util:test_models",
+        "//manipulation/util:test_directives",
+        "//multibody/parsing:test_models",
+        "//geometry:test_obj_files",
+        "//geometry:test_stl_files",
+        "//geometry:test_vtk_files",
+        "//geometry:environment_maps",
+        "//geometry/render_gltf_client:merge_resources",
+        "//geometry/render_gltf_client:gltf_client_test_models",
+    ],
+    visibility = ["//tools:__pkg__"],
+)
+
+_INSTALL_TEST_COMMANDS = "install_test_commands"
+
+# These are the (only) files from our root directory which are installed. Note
+# that even though the "data_dest" and "doc_dest" seem to be redundant with the
+# default value for those attributes, that is not the case with bzlmod (where
+# the default repository is named "_main" not "drake").
+install(
+    name = "install_files",
+    data = [
+        ".drake-find_resource-sentinel",
+        "package.xml",
+    ],
+    data_dest = "share/drake",
+    docs = ["LICENSE.TXT"],
+    doc_dest = "share/doc/drake",
+    visibility = ["//visibility:private"],
+)
+
+config_setting(
+    name = "install_python_true",
+    flag_values = {
+        "//tools/flags:install_python": "True",
+    },
+)
+
+config_setting(
+    name = "lcm_runtime_true_and_install_libdrake_static",
+    flag_values = {
+        "//tools/flags:with_lcm_runtime": "True",
+        "//tools/flags:install_libdrake": "static",
+    },
+)
+
+config_setting(
+    name = "install_python_true_and_install_libdrake_static",
+    flag_values = {
+        "//tools/flags:install_python": "True",
+        "//tools/flags:install_libdrake": "static",
+    },
+)
+
+install(
+    name = "install",
+    install_tests_script = _INSTALL_TEST_COMMANDS,
+    target_compatible_with = select({
+        "install_python_true_and_install_libdrake_static": [
+            "@platforms//:incompatible",
+        ],
+        "lcm_runtime_true_and_install_libdrake_static": [
+            "@platforms//:incompatible",
+        ],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":install_files",
+        "//common:install",
+        "//examples:install",
+        "//geometry:install",
+        "//lcmtypes:install",
+        "//multibody/parsing:install",
+        "//setup:install",
+        "//tools/install/libdrake:install",
+        "//tools/workspace:install_external_packages",
+    ] + select({
+        "//:install_python_true": [
+            "//bindings/pydrake:install",
+            "//tutorials:install",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+install_test(
+    name = "install_test",
+    args = ["--install_tests_filename=$(location :{})".format(
+        _INSTALL_TEST_COMMANDS,
+    )],
+    data = [
+        ":install",
+        _INSTALL_TEST_COMMANDS,
+    ],
+    tags = [
+        # Running acceptance tests under coverage (kcov) probably burns more CI
+        # time and flakiness compared to any upside.
+        "no_kcov",
+        # Running acceptance tests under Valgrind tools is extremely slow and
+        # of limited value, so skip them.
+        "no_valgrind_tools",
+    ],
+)
+
+add_lint_tests(
+    bazel_lint_extra_srcs = glob(
+        [
+            "cmake/external/workspace/**/*.bazel.in",
+            "cmake/external/workspace/**/*.bzl",
+        ],
+        allow_empty = False,
+    ),
+)

@@ -1,0 +1,508 @@
+load("@drake_mypy//:requirements.bzl", mypy_requirement = "requirement")
+load("//bindings/pydrake:pydrake.bzl", "add_lint_tests_pydrake")
+load("//bindings/pydrake:stubgen.bzl", "generate_python_stubs")
+load("//tools/install:install.bzl", "install")
+load("//tools/skylark:drake_cc.bzl", "drake_cc_library")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+load(
+    "//tools/skylark:pybind.bzl",
+    "drake_pybind_library",
+    "get_drake_py_installs",
+    "get_pybind_package_info",
+)
+load("//tools/workspace:generate_file.bzl", "generate_file")
+
+package(default_visibility = [
+    "//bindings:__subpackages__",
+])
+
+exports_files([
+    ".clang-format",
+])
+
+filegroup(
+    name = "doxygen_input",
+    srcs = ["pydrake_doxygen.h"],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+# This determines how `PYTHONPATH` is configured, and how to install the
+# bindings.
+PACKAGE_INFO = get_pybind_package_info(base_package = "//bindings")
+
+# This target provides the following Python modules:
+# - drake (i.e., our lcmtypes)
+# - pydrake
+# - pydrake.autodiffutils
+# - pydrake.common (and all of its sub-modules)
+# - pydrake.math
+# - pydrake.symbolic
+# Refer to bindings/pydrake/common/module_cycle.md for details.
+drake_py_library(
+    name = "module_py",
+    srcs = [
+        "__init__.py",
+    ],
+    deps = [
+        "//bindings/pydrake/common:_init_py",
+        "//lcmtypes:lcmtypes_drake_py",
+    ],
+)
+
+drake_cc_library(
+    name = "pydrake_pybind",
+    hdrs = ["pydrake_pybind.h"],
+    declare_installed_headers = 0,
+    visibility = ["//visibility:public"],
+)
+
+drake_cc_library(
+    name = "autodiff_types_pybind",
+    hdrs = ["autodiff_types_pybind.h"],
+    declare_installed_headers = 0,
+    visibility = ["//visibility:public"],
+    deps = ["//:drake_shared_library"],
+)
+
+drake_py_library(
+    name = "forwarddiff_py",
+    srcs = [
+        "forwarddiff.py",
+    ],
+    deps = [
+        ":module_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "lcm_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:lcm",
+        "//bindings/pydrake/common:deprecation_pybind",
+        "//bindings/pydrake/common:serialize_pybind",
+    ],
+    cc_srcs = ["lcm_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+    ],
+    py_srcs = ["_lcm_extra.py"],
+)
+
+drake_cc_library(
+    name = "math_operators_pybind",
+    hdrs = ["math_operators_pybind.h"],
+    declare_installed_headers = 0,
+    deps = ["//:drake_shared_library"],
+)
+
+drake_pybind_library(
+    name = "perception_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:perception",
+        "//bindings/pydrake/common:value_pybind",
+    ],
+    cc_srcs = ["perception_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+        "//bindings/pydrake/systems:sensors_py",
+    ],
+)
+
+drake_cc_library(
+    name = "polynomial_types_pybind",
+    hdrs = ["polynomial_types_pybind.h"],
+    declare_installed_headers = 0,
+    visibility = ["//visibility:public"],
+    deps = ["//:drake_shared_library"],
+)
+
+drake_pybind_library(
+    name = "polynomial_py",
+    cc_deps = [
+        ":polynomial_types_pybind",
+        "//bindings/generated_docstrings:common",
+        "//bindings/pydrake/common:default_scalars_pybind",
+    ],
+    cc_srcs = ["polynomial_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+    ],
+)
+
+drake_cc_library(
+    name = "symbolic_types_pybind",
+    hdrs = ["symbolic_types_pybind.h"],
+    declare_installed_headers = 0,
+    visibility = ["//visibility:public"],
+    deps = [
+        "//:drake_shared_library",
+    ],
+)
+
+drake_pybind_library(
+    name = "trajectories_py",
+    cc_deps = [
+        ":polynomial_types_pybind",
+        "//bindings/generated_docstrings:common_trajectories",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:deprecation_pybind",
+    ],
+    cc_srcs = ["trajectories_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+        ":polynomial_py",
+    ],
+    py_srcs = [
+        "_trajectories_extra.py",
+    ],
+)
+
+drake_py_library(
+    name = "tutorials_py",
+    srcs = [
+        "tutorials.py",
+    ],
+    deps = [
+        ":module_py",
+    ],
+)
+
+PY_LIBRARIES_WITH_INSTALL = [
+    ":lcm_py",
+    ":perception_py",
+    ":polynomial_py",
+    ":trajectories_py",
+    "//bindings/pydrake/common",
+    "//bindings/pydrake/examples",
+    "//bindings/pydrake/examples/gym",
+    "//bindings/pydrake/examples/multibody",
+    "//bindings/pydrake/geometry",
+    "//bindings/pydrake/gym",
+    "//bindings/pydrake/manipulation",
+    "//bindings/pydrake/multibody",
+    "//bindings/pydrake/planning",
+    "//bindings/pydrake/solvers",
+    "//bindings/pydrake/systems",
+    "//bindings/pydrake/visualization",
+]
+
+PY_LIBRARIES = [
+    ":forwarddiff_py",
+    ":module_py",
+    ":tutorials_py",
+]
+
+# Symbol roll-up (for user ease).
+drake_py_library(
+    name = "all_py",
+    srcs = [
+        "_all_everything.py",
+        "all.py",
+    ],
+    deps = PY_LIBRARIES_WITH_INSTALL + PY_LIBRARIES,
+)
+
+# Package roll-up (for Bazel dependencies).
+drake_py_library(
+    name = "pydrake",
+    visibility = ["//visibility:public"],
+    deps = [":all_py"],
+)
+
+# Roll-up for publicly accessible testing utilities (for development with
+# workflows like drake-external-examples/drake_bazel_external).
+drake_py_library(
+    name = "test_utilities_py",
+    testonly = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        # N.B. We depend on pydrake so as to keep symmetry with the currently
+        # offered public targets (rollup only, no granular access).
+        ":pydrake",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_pybind_library(
+    name = "pydrake_pybind_test_util_py",
+    testonly = True,
+    add_install = False,
+    cc_srcs = ["test/pydrake_pybind_test_util_py.cc"],
+    package_info = PACKAGE_INFO,
+)
+
+# N.B. Due to dependency on `common` (#7912), this is not a fully isolated /
+# decoupled test.
+drake_py_unittest(
+    name = "pydrake_pybind_test",
+    deps = [
+        ":module_py",
+        ":pydrake_pybind_test_util_py",
+    ],
+)
+
+drake_py_binary(
+    name = "print_symbol_collisions",
+    testonly = 1,
+    srcs = ["test/print_symbol_collisions.py"],
+    add_test_rule = 1,
+    deps = [":all_py"],
+)
+
+drake_py_unittest(
+    name = "all_test",
+    timeout = "moderate",
+    data = ["//examples/pendulum:models"],
+    deps = [
+        ":all_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "all_each_import_test",
+    shard_count = 8,
+    deps = [
+        ":all_py",
+        "//bindings/pydrake/common/test_utilities:meta_py",
+    ],
+)
+
+# Test ODR (One Definition Rule).
+drake_pybind_library(
+    name = "odr_test_module_py",
+    testonly = 1,
+    add_install = False,
+    cc_deps = [":symbolic_types_pybind"],
+    cc_so_name = "test/odr_test_module",
+    cc_srcs = ["test/odr_test_module_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_srcs = ["test/__init__.py"],
+    visibility = ["//visibility:private"],
+)
+
+drake_py_unittest(
+    name = "odr_test",
+    deps = [
+        ":odr_test_module_py",
+        "//bindings/pydrake:module_py",
+    ],
+)
+
+drake_py_library(
+    name = "mock_torch_py",
+    testonly = 1,
+    srcs = ["test/mock_torch/torch.py"],
+    imports = ["test/mock_torch"],
+)
+
+drake_py_unittest(
+    name = "rtld_global_warning_test",
+    deps = [
+        ":mock_torch_py",
+        ":module_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "forward_diff_test",
+    deps = [
+        ":forwarddiff_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "lcm_test",
+    deps = [
+        ":lcm_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "perception_test",
+    deps = [
+        ":perception_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "polynomial_test",
+    deps = [
+        ":polynomial_py",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "trajectories_test",
+    deps = [
+        ":trajectories_py",
+        "//bindings/pydrake/common/test_utilities:deprecation_py",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/common/test_utilities:pickle_compare_py",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "parse_models_test",
+    deps = [":pydrake"],
+)
+
+drake_py_unittest(
+    name = "dot_clang_format_test",
+    data = [
+        ":.clang-format",
+        "//:.clang-format",
+    ],
+    tags = ["lint"],
+)
+
+drake_py_unittest(
+    name = "memory_leak_test",
+    data = [
+        "@drake_models//:iiwa_description",
+        "@drake_models//:manipulation_station",
+        "@drake_models//:veggies",
+        "@drake_models//:wsg_50_description",
+    ],
+    deps = [
+        ":all_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_binary(
+    name = "stubgen",
+    srcs = ["stubgen.py"],
+    deps = [
+        ":all_py",
+        "@stable_baselines3_internal//:stable_baselines3",
+        mypy_requirement("mypy"),
+    ],
+)
+
+# TODO(jwnimmer-tri): It would be convenient if this could be automatically
+# generated. For now, we have stubgen.py that will fail-fast when this goes
+# out of date.
+PYI_FILES = [
+    "pydrake/autodiffutils.pyi",
+    "pydrake/common/__init__.pyi",
+    "pydrake/common/eigen_geometry.pyi",
+    "pydrake/common/schema.pyi",
+    "pydrake/common/value.pyi",
+    "pydrake/examples.pyi",
+    "pydrake/geometry/__init__.pyi",
+    "pydrake/geometry/all.pyi",
+    "pydrake/geometry/optimization.pyi",
+    "pydrake/lcm.pyi",
+    "pydrake/manipulation.pyi",
+    "pydrake/math.pyi",
+    "pydrake/multibody/benchmarks/__init__.pyi",
+    "pydrake/multibody/benchmarks/acrobot.pyi",
+    "pydrake/multibody/benchmarks/all.pyi",
+    "pydrake/multibody/cenic.pyi",
+    "pydrake/multibody/contact_solvers.pyi",
+    "pydrake/multibody/fem.pyi",
+    "pydrake/multibody/inverse_kinematics.pyi",
+    "pydrake/multibody/math.pyi",
+    "pydrake/multibody/meshcat.pyi",
+    "pydrake/multibody/optimization.pyi",
+    "pydrake/multibody/parsing.pyi",
+    "pydrake/multibody/plant.pyi",
+    "pydrake/multibody/rational.pyi",
+    "pydrake/multibody/tree.pyi",
+    "pydrake/perception.pyi",
+    "pydrake/planning.pyi",
+    "pydrake/polynomial.pyi",
+    "pydrake/solvers.pyi",
+    "pydrake/symbolic.pyi",
+    "pydrake/systems/analysis.pyi",
+    "pydrake/systems/controllers.pyi",
+    "pydrake/systems/estimators.pyi",
+    "pydrake/systems/framework.pyi",
+    "pydrake/systems/lcm.pyi",
+    "pydrake/systems/primitives.pyi",
+    "pydrake/systems/rendering.pyi",
+    "pydrake/systems/sensors.pyi",
+    "pydrake/trajectories.pyi",
+    "pydrake/visualization.pyi",
+]
+
+# TODO(mwoehlke-kitware): genrule inappropriately gives execute permission to
+# all its outputs; see https://github.com/bazelbuild/bazel/issues/3359.
+# (Applies to both :pydrake_pyi and, below, :pydrake_typed.)
+generate_python_stubs(
+    name = "pydrake_pyi",
+    outs = PYI_FILES,
+    tool = ":stubgen",
+)
+
+# PEP 561 marker file; tells tools that type information is available.
+genrule(
+    name = "pydrake_typed",
+    srcs = [],
+    outs = ["pydrake/py.typed"],
+    cmd = "echo '# Marker file for PEP 561.' > $@",
+)
+
+generate_file(
+    name = "_pyi_files",
+    content = "\n".join(PYI_FILES),
+    visibility = ["//visibility:private"],
+)
+
+drake_py_unittest(
+    name = "stubgen_test",
+    data = [
+        ":_pyi_files",
+        ":pydrake_pyi",
+        ":pydrake_typed",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+        mypy_requirement("mypy"),
+    ],
+)
+
+install(
+    name = "install",
+    install_tests = [
+        ":test/all_install_test.py",
+        ":test/common_install_test.py",
+    ],
+    targets = PY_LIBRARIES + [":all_py"],
+    py_dest = PACKAGE_INFO.py_dest,
+    data = [
+        ":pydrake_pyi",
+        ":pydrake_typed",
+    ],
+    data_dest = "lib/python@PYTHON_VERSION@/site-packages",
+    visibility = ["//visibility:public"],
+    deps = get_drake_py_installs(PY_LIBRARIES_WITH_INSTALL) + [
+        # These three modules are a special case.
+        # Refer to bindings/pydrake/common/module_cycle.md for details.
+        "//bindings/pydrake/autodiffutils:install",
+        "//bindings/pydrake/math:install",
+        "//bindings/pydrake/symbolic:install",
+        # Install the pybind11 headers if and only if we're installing pydrake.
+        "@pybind11//:install",
+    ],
+)
+
+add_lint_tests_pydrake(
+    python_lint_extra_srcs = [
+        ":test/all_install_test.py",
+        ":test/common_install_test.py",
+    ],
+)

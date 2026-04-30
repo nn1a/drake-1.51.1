@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<!--
+Defines a URDF model with collision filter groups.
+-->
+<robot xmlns:drake="http://drake.mit.edu" xmlns:xacro="http://ros.org/wiki/xacro" name="collision_filter_group_parsing_test">
+  <link name="link1">
+    <collision name="link1_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link2">
+    <collision name="link2_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link3">
+    <collision name="link3_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link4">
+    <collision name="link4_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link5">
+    <collision name="link5_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link6">
+    <collision name="link6_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link7">
+    <collision name="link7_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link8">
+    <collision name="link8_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link9">
+    <collision name="link9_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="link10">
+    <collision name="link10_sphere">
+      <geometry>
+        <sphere radius="0.40"/>
+      </geometry>
+    </collision>
+  </link>
+  <drake:collision_filter_group name="group_link14">
+    <drake:member link="link1"/>
+    <drake:member link="link4"/>
+    <drake:ignored_collision_filter_group name="group_link14"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_link2">
+    <drake:member link="link2"/>
+    <drake:ignored_collision_filter_group name="group_link3"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group ignore="true" name="group_link24">
+    <drake:member link="link2"/>
+    <drake:member link="link4"/>
+    <drake:ignored_collision_filter_group name="group_link24"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_link3">
+    <drake:member link="link3"/>
+    <drake:ignored_collision_filter_group name="group_link14"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_link56">
+    <drake:member link="link5"/>
+    <drake:member link="link6"/>
+    <drake:ignored_collision_filter_group name="group_link56"/>
+    <drake:ignored_collision_filter_group name="group_link3"/>
+    <drake:ignored_collision_filter_group name="group_link2"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_link78">
+    <drake:member link="link7"/>
+    <drake:member link="link8"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_link910">
+    <drake:member link="link9"/>
+    <drake:member link="link10"/>
+  </drake:collision_filter_group>
+  <drake:collision_filter_group name="group_of_groups">
+    <drake:member_group name="group_link78"/>
+    <drake:member_group name="group_link910"/>
+    <drake:ignored_collision_filter_group name="group_of_groups"/>
+  </drake:collision_filter_group>
+</robot>

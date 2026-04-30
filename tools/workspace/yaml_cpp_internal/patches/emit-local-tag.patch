@@ -1,0 +1,33 @@
+[yaml_cpp] Customize tag emitting for Drake
+
+Upstream yaml-cpp does not support writing out primary tags, so here
+we patch our vendored copy of yaml-cpp's emitter to write them, so
+that Drake's YamlWriteArchive can support std::variant<> emitting.
+
+Reasoning for not upstreaming this patch: Drake-specific default option.
+
+--- src/emitfromevents.cpp
++++ src/emitfromevents.cpp
+@@ -116,12 +116,17 @@ void EmitFromEvents::BeginNode() {
+ }
+ 
+ void EmitFromEvents::EmitProps(const std::string& tag, anchor_t anchor) {
+   if (!tag.empty() && tag != "?" && tag != "!"){
+-      if (tag[0] == '!') {
+-        m_emitter << LocalTag(std::string(tag.begin()+1, tag.end()));
+-      } else {
+-        m_emitter << VerbatimTag(tag);
+-      }
++    // N.B. The upstream yaml-cpp uses VerbatimTag here, but Drake has patched
++    // this file to meet our needs instead. Upstream support for custom tags
++    // during emitting is "pretty bad" (i.e., non-existent); for details see
++    // https://github.com/jbeder/yaml-cpp/issues/311 and
++    // https://github.com/jbeder/yaml-cpp/issues/447.
++    if (tag.substr(0, 2) == "!!") {
++      m_emitter << SecondaryTag(tag.substr(2));
++    } else {
++      m_emitter << LocalTag(tag);
++    }
+   }
+   if (anchor)
+     m_emitter << Anchor(ToString(anchor));

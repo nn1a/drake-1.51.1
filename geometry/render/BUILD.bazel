@@ -1,0 +1,212 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load("//tools/skylark:test_tags.bzl", "vtk_test_tags")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "doxygen_input",
+    srcs = ["render_doxygen.h"],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+drake_cc_package_library(
+    name = "render",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":light_parameter",
+        ":render_camera",
+        ":render_engine",
+        ":render_label",
+        ":render_material",
+        ":render_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "light_parameter",
+    srcs = ["light_parameter.cc"],
+    hdrs = ["light_parameter.h"],
+    deps = [
+        "//common:essential",
+        "//common:name_value",
+        "//geometry:rgba",
+    ],
+)
+
+drake_cc_library(
+    name = "render_camera",
+    srcs = ["render_camera.cc"],
+    hdrs = ["render_camera.h"],
+    deps = [
+        "//common:essential",
+        "//math:geometric_transform",
+        "//systems/sensors:camera_info",
+    ],
+)
+
+# A build target for code that wants to interact with the *idea* of a render
+# engine but doesn't want any build dependencies on the implementation details.
+drake_cc_library(
+    name = "render_engine",
+    srcs = ["render_engine.cc"],
+    hdrs = ["render_engine.h"],
+    deps = [
+        ":render_camera",
+        ":render_label",
+        ":render_mesh",
+        "//common:essential",
+        "//geometry:geometry_ids",
+        "//geometry:geometry_roles",
+        "//geometry:shape_specification",
+        "//geometry:utilities",
+        "//math:geometric_transform",
+        "//systems/sensors:camera_info",
+        "//systems/sensors:image",
+    ],
+)
+
+drake_cc_library(
+    name = "render_label",
+    srcs = ["render_label.cc"],
+    hdrs = ["render_label.h"],
+    deps = [
+        "//common:essential",
+        "//common:hash",
+        "//systems/sensors:image",
+    ],
+)
+
+drake_cc_library(
+    name = "render_material",
+    srcs = ["render_material.cc"],
+    hdrs = ["render_material.h"],
+    deps = [
+        "//common:diagnostic_policy",
+        "//common:essential",
+        "//common:overloaded",
+        "//geometry:geometry_properties",
+        "//geometry:rgba",
+    ],
+    implementation_deps = [
+        "@tinyobjloader_internal//:tinyobjloader",
+    ],
+)
+
+drake_cc_library(
+    name = "render_mesh",
+    srcs = ["render_mesh.cc"],
+    hdrs = ["render_mesh.h"],
+    deps = [
+        ":render_material",
+        "//common:diagnostic_policy",
+        "//common:essential",
+        "//common:find_resource",
+        "//geometry:geometry_properties",
+        "//geometry:mesh_source",
+        "//geometry:rgba",
+        "//geometry/proximity:triangle_surface_mesh",
+    ],
+    implementation_deps = [
+        "@tinyobjloader_internal//:tinyobjloader",
+    ],
+)
+
+# === test/ ===
+
+genrule(
+    name = "box_no_mtl",
+    srcs = ["test/meshes/box.obj"],
+    outs = ["test/meshes/box_no_mtl.obj"],
+    cmd = "sed '/mtllib/d; /usemtl/d' $< > $@",
+    visibility = ["//visibility:private"],
+)
+
+genrule(
+    name = "box_checkered",
+    srcs = ["test/meshes/box.obj"],
+    outs = ["test/meshes/box_checkered.obj"],
+    cmd = "sed 's/box.obj.mtl/checker.mtl/' $< > $@",
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "test_models",
+    testonly = 1,
+    srcs = [
+        "test/box.sdf",
+        ":box_checkered",
+        ":box_no_mtl",
+    ] + glob([
+        "test/meshes/*",
+        "test/*.png",
+    ]),
+)
+
+drake_cc_googletest(
+    name = "light_parameter_test",
+    deps = [
+        ":light_parameter",
+        "//common/test_utilities",
+        "//common/yaml:yaml_io",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_camera_test",
+    deps = [
+        ":render_camera",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_engine_test",
+    deps = [
+        ":render_engine",
+        "//common/test_utilities",
+        "//geometry:geometry_ids",
+        "//geometry/test_utilities:dummy_render_engine",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_label_test",
+    deps = [
+        ":render_label",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_material_test",
+    data = [":test_models"],
+    deps = [
+        ":render_material",
+        "//common/test_utilities:diagnostic_policy_test_base",
+        "//geometry:geometry_roles",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_mesh_test",
+    data = [":test_models"],
+    deps = [
+        ":render_mesh",
+        "//common:find_resource",
+        "//common:temp_directory",
+        "//common/test_utilities:diagnostic_policy_test_base",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry:geometry_roles",
+    ],
+)
+
+add_lint_tests()

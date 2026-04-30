@@ -1,0 +1,278 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_library",
+)
+load("//tools/skylark:drake_sh.bzl", "drake_sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "drake_py_unittest_main.py",
+])
+
+# This should encompass every cc_library in this package, except for items that
+# should only ever be linked into main() programs.
+drake_cc_package_library(
+    name = "test_utilities",
+    testonly = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":diagnostic_policy_test_base",
+        ":eigen_matrix_compare",
+        ":expect_no_throw",
+        ":expect_throws_message",
+        ":is_dynamic_castable",
+        ":is_memcpy_movable",
+        ":maybe_pause_for_user",
+        ":measure_execution",
+        ":random_polynomial_matrix",
+        ":set_env",
+        ":symbolic_test_util",
+    ],
+)
+
+drake_cc_library(
+    name = "diagnostic_policy_test_base",
+    testonly = 1,
+    srcs = ["diagnostic_policy_test_base.cc"],
+    hdrs = ["diagnostic_policy_test_base.h"],
+    deps = [
+        "//common:diagnostic_policy",
+        "@googletest//:gtest_for_library",
+    ],
+)
+
+drake_cc_library(
+    name = "eigen_matrix_compare",
+    testonly = 1,
+    hdrs = ["eigen_matrix_compare.h"],
+    deps = [
+        "//common:essential",
+        "@googletest//:gtest_for_library",
+    ],
+)
+
+drake_cc_library(
+    name = "expect_no_throw",
+    testonly = 1,
+    hdrs = ["expect_no_throw.h"],
+    deps = [
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "expect_throws_message",
+    testonly = 1,
+    hdrs = ["expect_throws_message.h"],
+    deps = ["//common:essential"],
+)
+
+drake_cc_library(
+    name = "gtest_printers",
+    hdrs = [
+        "eigen_printer.h",
+        "fmt_format_printer.h",
+    ],
+    tags = ["exclude_from_package"],
+    visibility = ["@googletest//:__pkg__"],
+    deps = [
+        "//common:fmt",
+        "@eigen",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "is_dynamic_castable",
+    testonly = 1,
+    hdrs = ["is_dynamic_castable.h"],
+    deps = [
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "is_memcpy_movable",
+    testonly = 1,
+    hdrs = ["is_memcpy_movable.h"],
+)
+
+drake_cc_library(
+    name = "measure_execution",
+    testonly = 1,
+    hdrs = ["measure_execution.h"],
+)
+
+drake_cc_library(
+    name = "random_polynomial_matrix",
+    testonly = 1,
+    hdrs = ["random_polynomial_matrix.h"],
+    deps = [
+        "//common:polynomial",
+    ],
+)
+
+drake_cc_library(
+    name = "limit_malloc",
+    testonly = 1,
+    srcs = ["limit_malloc.cc"],
+    hdrs = ["limit_malloc.h"],
+    copts = [
+        # We shouldn't call __tsan_func_entry from allocations during dl_init.
+        "-fno-sanitize=thread",
+    ],
+    tags = [
+        # The limit_malloc library be used sparingly, and not by default.
+        # Don't add this library into the ":test_utilities" package library.
+        "exclude_from_package",
+    ],
+    deps = [
+        # Keep it simple and don't depend on any Drake code.
+    ],
+)
+
+drake_cc_library(
+    name = "set_env",
+    testonly = 1,
+    hdrs = ["set_env.h"],
+)
+
+drake_cc_library(
+    name = "symbolic_test_util",
+    testonly = 1,
+    hdrs = ["symbolic_test_util.h"],
+    deps = [
+        "//common/symbolic:expression",
+        "//common/symbolic:generic_polynomial",
+        "//common/symbolic:polynomial",
+        "//common/symbolic:rational_function",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_cc_googletest_main",
+    testonly = 1,
+    srcs = ["drake_cc_googletest_main.cc"],
+    tags = [
+        # This is only intended to be used by the drake_cc_googletest() macro.
+        # Don't add this library into the ":test_utilities" package library.
+        "exclude_from_package",
+    ],
+    deps = [
+        "//common:add_text_logging_gflags",
+        "@googletest//:gtest_for_library",
+    ],
+)
+
+drake_cc_googletest(
+    name = "limit_malloc_test",
+    args = [
+        # By default, we will skip the death tests because they only pass on
+        # non-Apple, non-Sanitizer, non-Memcheck builds.  We will explicitly
+        # run them (below) for the configurations that succeed.
+        "--gtest_filter=-*DeathTest*",
+    ],
+    deps = [
+        ":limit_malloc",
+    ],
+)
+
+drake_cc_binary(
+    name = "limit_malloc_manual_test",
+    testonly = 1,
+    srcs = ["test/limit_malloc_manual_test.cc"],
+    deps = [
+        ":limit_malloc",
+    ],
+)
+
+# N.B. All sh_tests are excluded from sanitizer builds by default; these death
+# tests are therefore skipped under those configurations.
+drake_sh_test(
+    name = "limit_malloc_death_test",
+    srcs = [":limit_malloc_test"],
+    args = select({
+        "//tools/cc_toolchain:apple": [
+            # The code to enforce malloc limits is not implemented on macOS.
+            "--gtest_filter=-*",
+        ],
+        "//conditions:default": [
+            # Run only the death tests, not the plain tests.
+            "--gtest_filter=*DeathTest*",
+        ],
+    }),
+    data = [
+        ":limit_malloc_test",
+    ],
+    # Fails to terminate when run under Valgrind tools.
+    tags = ["no_valgrind_tools"],
+)
+
+drake_cc_googletest(
+    name = "eigen_matrix_compare_test",
+    deps = [
+        ":eigen_matrix_compare",
+        "//common:essential",
+    ],
+)
+
+drake_cc_googletest(
+    name = "is_dynamic_castable_test",
+    deps = [
+        ":is_dynamic_castable",
+    ],
+)
+
+drake_cc_googletest(
+    name = "is_memcpy_movable_test",
+    deps = [
+        ":is_memcpy_movable",
+    ],
+)
+
+drake_py_library(
+    name = "disable_python_unittest",
+    srcs = ["disable_python_unittest/unittest/__init__.py"],
+    imports = ["disable_python_unittest"],
+)
+
+drake_cc_googletest(
+    name = "expect_no_throw_test",
+    deps = [
+        ":expect_no_throw",
+    ],
+)
+
+drake_cc_library(
+    name = "maybe_pause_for_user",
+    testonly = 1,
+    srcs = ["maybe_pause_for_user.cc"],
+    hdrs = ["maybe_pause_for_user.h"],
+)
+
+drake_cc_googletest(
+    name = "maybe_pause_for_user_test",
+    deps = [
+        ":maybe_pause_for_user",
+    ],
+)
+
+drake_cc_binary(
+    name = "maybe_pause_for_user_manual_test",
+    testonly = 1,
+    srcs = ["test/maybe_pause_for_user_manual_test.cc"],
+    deps = [
+        ":maybe_pause_for_user",
+    ],
+)
+
+add_lint_tests()

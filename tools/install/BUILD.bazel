@@ -1,0 +1,68 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_py_library(
+    name = "module_py",
+    srcs = ["__init__.py"],
+    visibility = [":__subpackages__"],
+    deps = ["//tools:module_py"],
+)
+
+drake_py_library(
+    name = "otool",
+    srcs = ["otool.py"],
+    visibility = ["//:__subpackages__"],
+    deps = [":module_py"],
+)
+
+drake_py_library(
+    name = "install_test_helper",
+    testonly = 1,
+    srcs = ["install_test_helper.py"],
+    data = ["//:install"],
+    imports = ["."],
+)
+
+exports_files(
+    [
+        "install_test.py",
+    ],
+)
+
+drake_py_binary(
+    name = "installer",
+    srcs = ["installer.py"],
+    data = ["@patchelf"],
+    deps = [
+        ":otool",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_unittest(
+    name = "installer_test",
+    data = [":installer"],
+)
+
+# Runs `install_test_helper` unit tests.
+drake_py_unittest(
+    name = "install_test_helper_test",
+    deps = [":install_test_helper"],
+)
+
+drake_py_unittest(
+    name = "install_meta_test",
+    data = [
+        ":installer",
+        "//tools/install/dummy:install",
+    ],
+)
+
+add_lint_tests()

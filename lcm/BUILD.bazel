@@ -1,0 +1,270 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_unittest",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "lcm",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":drake_lcm",
+        ":drake_lcm_base",
+        ":drake_lcm_params",
+        ":interface",
+        ":lcm_log",
+        ":lcm_messages",
+    ],
+)
+
+drake_cc_library(
+    name = "lcm_messages",
+    srcs = ["lcm_messages.cc"],
+    hdrs = ["lcm_messages.h"],
+    deps = [
+        "//common:essential",
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "interface",
+    srcs = ["drake_lcm_interface.cc"],
+    hdrs = ["drake_lcm_interface.h"],
+    deps = [
+        ":lcm_messages",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_lcm_base",
+    srcs = ["drake_lcm_base.cc"],
+    hdrs = ["drake_lcm_base.h"],
+    deps = [
+        ":interface",
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_lcm_params",
+    hdrs = ["drake_lcm_params.h"],
+    deps = [
+        "//common:essential",
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_lcm",
+    srcs = select({
+        "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": [
+            "drake_lcm.cc",
+        ],
+        "//conditions:default": [
+            "drake_lcm_disabled.cc",
+        ],
+    }),
+    hdrs = ["drake_lcm.h"],
+    tags = [
+        # The select() confuses add_lint_tests(). Instead of linting this
+        # library, we'll add its sources to cpplint_extra_srcs, below.
+        "nolint",
+    ],
+    deps = [
+        ":drake_lcm_params",
+        ":interface",
+        "//common:essential",
+    ],
+    implementation_deps = select({
+        "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": [
+            "//common:network_policy",
+            "//tools/workspace/lcm_internal:shared_library",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+drake_cc_library(
+    name = "lcm_log",
+    srcs = select({
+        "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": [
+            "drake_lcm_log.cc",
+        ],
+        "//conditions:default": [
+            "drake_lcm_log_disabled.cc",
+        ],
+    }),
+    hdrs = ["drake_lcm_log.h"],
+    tags = [
+        # The select() confuses add_lint_tests(). Instead of linting this
+        # library, we'll add its sources to cpplint_extra_srcs, below.
+        "nolint",
+    ],
+    deps = [
+        ":interface",
+        "//common:essential",
+    ],
+    implementation_deps = select({
+        "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": [
+            "//common:string_container",
+            "//tools/workspace/lcm_internal:shared_library",
+        ],
+        "//conditions:default": [
+            "//common:unused",
+        ],
+    }),
+)
+
+drake_cc_library(
+    name = "lcmt_drake_signal_utils",
+    testonly = 1,
+    srcs = ["lcmt_drake_signal_utils.cc"],
+    hdrs = ["lcmt_drake_signal_utils.h"],
+    deps = [
+        "//common:essential",
+        "//lcmtypes:lcmtypes_drake_cc",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "lcm_messages_test",
+    deps = [
+        ":lcm_messages",
+        ":lcmt_drake_signal_utils",
+        "//common/test_utilities",
+        "//lcmtypes:lcmtypes_drake_cc",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_interface_test",
+    deps = [
+        ":drake_lcm",
+        ":lcmt_drake_signal_utils",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_base_test",
+    deps = [
+        ":drake_lcm_base",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_test",
+    allow_network = ["lcm"],
+    flaky = True,
+    deps = [
+        ":drake_lcm",
+        ":lcmt_drake_signal_utils",
+        "//common/test_utilities:expect_throws_message",
+        "//tools/workspace/lcm_internal:shared_library",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_denied_test",
+    allow_network = ["none"],
+    deps = [
+        ":drake_lcm",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_disabled_test",
+    srcs = [
+        "drake_lcm.h",
+        "drake_lcm_disabled.cc",
+        "drake_lcm_log.h",
+        "drake_lcm_log_disabled.cc",
+        "test/drake_lcm_disabled_test.cc",
+    ],
+    tags = [
+        # To avoid linting these files twice, we'll turn off lint here and then
+        # add the test file to cpplint_extra_srcs, below.
+        "nolint",
+    ],
+    deps = [
+        ":drake_lcm_params",
+        ":interface",
+        "//common/test_utilities:expect_throws_message",
+        "//lcmtypes:lcmtypes_drake_cc",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_thread_test",
+    flaky = True,
+    deps = [
+        ":drake_lcm",
+        ":lcmt_drake_signal_utils",
+        "//tools/workspace/lcm_internal:shared_library",
+    ],
+)
+
+drake_cc_binary(
+    name = "initialization_sequence_test_stub",
+    testonly = True,
+    srcs = ["test/initialization_sequence_test_stub.cc"],
+    deps = [
+        ":drake_lcm",
+        "//common:add_text_logging_gflags",
+        "//lcmtypes:lcmtypes_drake_cc",
+        "@gflags",
+    ],
+)
+
+drake_py_unittest(
+    name = "initialization_sequence_test",
+    allow_network = ["lcm"],
+    data = [
+        ":initialization_sequence_test_stub",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_lcm_log_test",
+    deps = [
+        ":lcm_log",
+        ":lcmt_drake_signal_utils",
+    ],
+)
+
+drake_cc_googletest(
+    name = "lcmt_drake_signal_utils_test",
+    deps = [
+        ":lcmt_drake_signal_utils",
+    ],
+)
+
+add_lint_tests(
+    cpplint_extra_srcs = [
+        "drake_lcm.h",
+        "drake_lcm.cc",
+        "drake_lcm_disabled.cc",
+        "drake_lcm_log.h",
+        "drake_lcm_log.cc",
+        "drake_lcm_log_disabled.cc",
+        "test/drake_lcm_disabled_test.cc",
+    ],
+)

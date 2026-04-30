@@ -1,0 +1,79 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+)
+
+package(default_visibility = [
+    # All benchmarks should be in folders named "benchmarking".
+    "//common/benchmarking:__pkg__",
+    "//geometry/benchmarking:__pkg__",
+    "//lcmtypes/benchmarking:__pkg__",
+    "//multibody/benchmarking:__pkg__",
+    "//solvers/benchmarking:__pkg__",
+    "//systems/benchmarking:__pkg__",
+])
+
+drake_cc_library(
+    name = "fixture_common",
+    srcs = ["fixture_common.cc"],
+    hdrs = ["fixture_common.h"],
+    deps = [
+        "@google_benchmark//:benchmark",
+    ],
+)
+
+config_setting(
+    name = "apple",
+    constraint_values = ["@platforms//os:osx"],
+)
+
+selects.config_setting_group(
+    name = "fixture_memory_no",
+    match_any = [
+        ":apple",
+        "//tools:using_memcheck",
+        "//tools:using_sanitizer",
+    ],
+)
+
+drake_cc_library(
+    name = "fixture_memory",
+    srcs = select({
+        ":fixture_memory_no": ["fixture_memory_no.cc"],
+        "//conditions:default": ["fixture_memory_yes.cc"],
+    }),
+    hdrs = ["fixture_memory.h"],
+    deps = [
+        "//common:essential",
+        "@google_benchmark//:benchmark",
+    ],
+)
+
+drake_cc_library(
+    name = "gflags_main",
+    srcs = ["gflags_main.cc"],
+    deps = [
+        ":fixture_memory",
+        "@gflags",
+        "@google_benchmark//:benchmark",
+    ],
+)
+
+drake_py_binary(
+    name = "benchmark_tool",
+    testonly = True,
+    srcs = ["benchmark_tool.py"],
+)
+
+add_lint_tests(
+    cpplint_extra_srcs = [
+        "fixture_memory_no.cc",
+        "fixture_memory_yes.cc",
+    ],
+)

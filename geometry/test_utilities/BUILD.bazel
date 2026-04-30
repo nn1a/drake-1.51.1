@@ -1,0 +1,63 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "test_utilities",
+    testonly = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":boxes_overlap_transforms",
+        ":dummy_render_engine",
+        ":geometry_set_tester",
+    ],
+)
+
+drake_cc_library(
+    name = "boxes_overlap_transforms",
+    testonly = 1,
+    srcs = ["boxes_overlap_transforms.cc"],
+    hdrs = ["boxes_overlap_transforms.h"],
+    deps = ["//math:geometric_transform"],
+)
+
+drake_cc_library(
+    name = "geometry_set_tester",
+    testonly = 1,
+    srcs = [],
+    hdrs = ["geometry_set_tester.h"],
+    deps = ["//geometry:geometry_set"],
+)
+
+drake_cc_library(
+    name = "dummy_render_engine",
+    testonly = 1,
+    srcs = [],
+    hdrs = ["dummy_render_engine.h"],
+    deps = ["//geometry/render:render_engine"],
+)
+
+drake_cc_library(
+    name = "meshcat_environment",
+    testonly = 1,
+    srcs = ["meshcat_environment.cc"],
+    hdrs = ["meshcat_environment.h"],
+    tags = [
+        # This utility introduces global test set-up and tear-down.
+        # Developers should opt-in to that behavior, rather than have it occur
+        # implicitly by depending on the entire utilities library.
+        "exclude_from_package",
+    ],
+    deps = [
+        "//geometry:meshcat",
+        "@googletest//:gtest_for_library",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,1237 @@
+load("//tools/install:install.bzl", "install", "install_files")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "doxygen_input",
+    srcs = [
+        "geometry_doxygen.h",
+        "geometry_file_formats_doxygen.h",
+        "geometry_infrastructure_doxygen.h",
+    ],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+drake_cc_package_library(
+    name = "geometry",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":collision_filter_declaration",
+        ":collision_filter_manager",
+        ":deformable_mesh_with_bvh",
+        ":drake_visualizer",
+        ":drake_visualizer_params",
+        ":geometry_frame",
+        ":geometry_ids",
+        ":geometry_instance",
+        ":geometry_properties",
+        ":geometry_roles",
+        ":geometry_set",
+        ":geometry_state",
+        ":geometry_version",
+        ":in_memory_mesh",
+        ":internal_frame",
+        ":internal_geometry",
+        ":kinematics_vector",
+        ":make_mesh_for_deformable",
+        ":mesh_deformation_interpolator",
+        ":mesh_source",
+        ":meshcat",
+        ":meshcat_animation",
+        ":meshcat_graphviz",
+        ":meshcat_point_cloud_visualizer",
+        ":meshcat_visualizer",
+        ":meshcat_visualizer_params",
+        ":poisson_disk",
+        ":proximity_engine",
+        ":proximity_properties",
+        ":read_gltf_to_memory",
+        ":read_obj",
+        ":rgba",
+        ":scene_graph",
+        ":scene_graph_config",
+        ":scene_graph_inspector",
+        ":shape_specification",
+        ":utilities",
+    ],
+)
+
+drake_cc_library(
+    name = "proximity_engine",
+    srcs = [
+        "proximity_engine.cc",
+    ],
+    hdrs = [
+        "proximity_engine.h",
+    ],
+    deps = [
+        ":geometry_ids",
+        ":geometry_roles",
+        ":internal_geometry",
+        ":mesh_deformation_interpolator",
+        ":shape_specification",
+        "//common:default_scalars",
+        "//common:sorted_pair",
+        "//geometry/proximity:collision_filter",
+        "//geometry/proximity:deformable_contact_internal",
+        "//geometry/proximity:hydroelastic_internal",
+        "//geometry/proximity:make_mesh_from_vtk",
+        "//geometry/query_results",
+        "//math",
+    ],
+    implementation_deps = [
+        ":read_obj",
+        ":utilities",
+        "//geometry/proximity",
+        "//geometry/proximity:collisions_exist_callback",
+        "//geometry/proximity:deformable_contact_geometries",
+        "//geometry/proximity:distance_to_point_callback",
+        "//geometry/proximity:distance_to_shape_callback",
+        "//geometry/proximity:find_collision_candidates_callback",
+        "//geometry/proximity:hydroelastic_calculator",
+        "//geometry/proximity:obj_to_surface_mesh",
+        "//geometry/proximity:penetration_as_point_pair_callback",
+        "@fcl_internal//:fcl",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "collision_filter_declaration",
+    srcs = ["collision_filter_declaration.cc"],
+    hdrs = ["collision_filter_declaration.h"],
+    deps = [
+        ":geometry_set",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "collision_filter_manager",
+    srcs = ["collision_filter_manager.cc"],
+    hdrs = ["collision_filter_manager.h"],
+    deps = [
+        ":collision_filter_declaration",
+        ":geometry_ids",
+        ":geometry_set",
+        "//geometry/proximity:collision_filter",
+    ],
+)
+
+drake_cc_library(
+    name = "deformable_mesh_with_bvh",
+    srcs = ["deformable_mesh_with_bvh.cc"],
+    hdrs = ["deformable_mesh_with_bvh.h"],
+    deps = [
+        "//geometry/proximity:bvh",
+        "//geometry/proximity:bvh_updater",
+        "//geometry/proximity:volume_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_visualizer",
+    srcs = ["drake_visualizer.cc"],
+    hdrs = ["drake_visualizer.h"],
+    deps = [
+        ":drake_visualizer_params",
+        ":geometry_roles",
+        ":geometry_version",
+        ":scene_graph",
+        "//common:essential",
+        "//lcm:interface",
+        "//systems/framework:context",
+        "//systems/framework:leaf_system",
+    ],
+    implementation_deps = [
+        "//lcm:drake_lcm",
+        "//lcmtypes:lcmtypes_drake_cc",
+        "//systems/lcm:lcm_system_graphviz",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+drake_cc_library(
+    name = "drake_visualizer_params",
+    hdrs = ["drake_visualizer_params.h"],
+    deps = [
+        ":geometry_roles",
+        ":rgba",
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "kinematics_vector",
+    srcs = [
+        "kinematics_vector.cc",
+    ],
+    hdrs = [
+        "kinematics_vector.h",
+    ],
+    deps = [
+        ":geometry_ids",
+        "//common:essential",
+        "//math:geometric_transform",
+    ],
+    implementation_deps = [
+        "//common:default_scalars",
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_frame",
+    srcs = ["geometry_frame.cc"],
+    hdrs = ["geometry_frame.h"],
+    deps = [
+        ":geometry_ids",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_ids",
+    srcs = [],
+    hdrs = ["geometry_ids.h"],
+    deps = ["//common:identifier"],
+)
+
+drake_cc_library(
+    name = "geometry_instance",
+    srcs = ["geometry_instance.cc"],
+    hdrs = ["geometry_instance.h"],
+    deps = [
+        ":geometry_ids",
+        ":geometry_roles",
+        ":shape_specification",
+        ":utilities",
+        "//common:copyable_unique_ptr",
+        "//common:essential",
+        "//geometry/proximity:volume_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_properties",
+    srcs = ["geometry_properties.cc"],
+    hdrs = ["geometry_properties.h"],
+    deps = [
+        ":rgba",
+        "//common:essential",
+        "//common:value",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_version",
+    srcs = ["geometry_version.cc"],
+    hdrs = ["geometry_version.h"],
+    deps = [
+        ":geometry_roles",
+        "//common:essential",
+        "//common:identifier",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_roles",
+    srcs = ["geometry_roles.cc"],
+    hdrs = ["geometry_roles.h"],
+    deps = [
+        ":geometry_properties",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "geometry_set",
+    hdrs = ["geometry_set.h"],
+    deps = [":geometry_ids"],
+)
+
+drake_cc_library(
+    name = "geometry_state",
+    srcs = ["geometry_state.cc"],
+    hdrs = ["geometry_state.h"],
+    deps = [
+        ":collision_filter_manager",
+        ":geometry_frame",
+        ":geometry_ids",
+        ":geometry_instance",
+        ":geometry_set",
+        ":geometry_version",
+        ":internal_frame",
+        ":internal_geometry",
+        ":kinematics_vector",
+        ":mesh_deformation_interpolator",
+        ":proximity_engine",
+        ":scene_graph_config",
+        ":utilities",
+        "//geometry/proximity:calc_obb",
+        "//geometry/proximity:make_convex_hull_mesh",
+        "//geometry/render:render_engine",
+        "//math:gradient",
+    ],
+)
+
+drake_cc_library(
+    name = "in_memory_mesh",
+    srcs = ["in_memory_mesh.cc"],
+    hdrs = ["in_memory_mesh.h"],
+    deps = [
+        "//common:file_source",
+        "//common:memory_file",
+        "//common:string_container",
+    ],
+)
+
+drake_cc_library(
+    name = "poisson_disk",
+    srcs = ["poisson_disk.cc"],
+    hdrs = ["poisson_disk.h"],
+    deps = [
+        ":scene_graph",
+        ":shape_specification",
+        "//common:essential",
+        "//geometry/proximity:bv",
+        "//math:geometric_transform",
+    ],
+    implementation_deps = [
+        "@poisson_disk_sampling_internal//:poisson_disk_sampling",
+    ],
+)
+
+drake_cc_library(
+    name = "read_gltf_to_memory",
+    srcs = ["read_gltf_to_memory.cc"],
+    hdrs = ["read_gltf_to_memory.h"],
+    deps = [
+        ":in_memory_mesh",
+    ],
+    implementation_deps = [
+        "//common:file_source",
+        "//common:memory_file",
+        "//common:string_container",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+drake_cc_library(
+    name = "make_mesh_for_deformable",
+    srcs = ["make_mesh_for_deformable.cc"],
+    hdrs = ["make_mesh_for_deformable.h"],
+    deps = [
+        ":shape_specification",
+        "//common:overloaded",
+        "//geometry/proximity:make_mesh_from_vtk",
+        "//geometry/proximity:make_sphere_mesh",
+        "//geometry/proximity:volume_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "mesh_deformation_interpolator",
+    srcs = ["mesh_deformation_interpolator.cc"],
+    hdrs = ["mesh_deformation_interpolator.h"],
+    deps = [
+        "//geometry/proximity:triangle_surface_mesh",
+        "//geometry/proximity:volume_mesh",
+        "//geometry/proximity:volume_to_surface_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "mesh_source",
+    srcs = ["mesh_source.cc"],
+    hdrs = ["mesh_source.h"],
+    deps = [
+        ":in_memory_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "proximity_properties",
+    srcs = ["proximity_properties.cc"],
+    hdrs = ["proximity_properties.h"],
+    deps = [
+        ":geometry_roles",
+        "//multibody/plant:coulomb_friction",
+    ],
+)
+
+drake_cc_library(
+    name = "scene_graph_config",
+    srcs = ["scene_graph_config.cc"],
+    hdrs = ["scene_graph_config.h"],
+    deps = [
+        ":proximity_properties",
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "scene_graph",
+    srcs = [
+        "query_object.cc",
+        "scene_graph.cc",
+    ],
+    hdrs = [
+        "query_object.h",
+        "scene_graph.h",
+    ],
+    deps = [
+        ":geometry_state",
+        ":scene_graph_config",
+        ":scene_graph_inspector",
+        "//common:essential",
+        "//common:nice_type_name",
+        "//geometry/query_results:contact_surface",
+        "//geometry/query_results:penetration_as_point_pair",
+        "//geometry/query_results:signed_distance_pair",
+        "//geometry/query_results:signed_distance_to_point",
+        "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "scene_graph_inspector",
+    srcs = ["scene_graph_inspector.cc"],
+    hdrs = ["scene_graph_inspector.h"],
+    deps = [":geometry_state"],
+)
+
+drake_cc_library(
+    name = "internal_frame",
+    srcs = ["internal_frame.cc"],
+    hdrs = ["internal_frame.h"],
+    deps = [
+        ":geometry_ids",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "internal_geometry",
+    srcs = ["internal_geometry.cc"],
+    hdrs = ["internal_geometry.h"],
+    deps = [
+        ":geometry_ids",
+        ":geometry_roles",
+        ":internal_frame",
+        ":make_mesh_for_deformable",
+        ":shape_specification",
+        "//common:copyable_unique_ptr",
+        "//common:essential",
+        "//geometry/proximity:bv",
+        "//geometry/proximity:calc_obb",
+        "//geometry/proximity:polygon_surface_mesh",
+        "//geometry/proximity:volume_mesh",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "read_obj",
+    srcs = ["read_obj.cc"],
+    hdrs = ["read_obj.h"],
+    deps = [
+        ":mesh_source",
+        "//common:diagnostic_policy",
+        "@eigen",
+    ],
+    implementation_deps = [
+        "//common:essential",
+        "//common:memory_file",
+        "@fmt",
+        "@tinyobjloader_internal//:tinyobjloader",
+    ],
+)
+
+drake_cc_library(
+    name = "shape_specification",
+    srcs = ["shape_specification.cc"],
+    hdrs = ["shape_specification.h"],
+    deps = [
+        ":mesh_source",
+        "//common:essential",
+        "//geometry/proximity:polygon_surface_mesh",
+        "//math:geometric_transform",
+    ],
+    implementation_deps = [
+        "//common:nice_type_name",
+        "//common:overloaded",
+        "//geometry/proximity:make_convex_hull_mesh_impl",
+        "//geometry/proximity:meshing_utilities",
+        "//geometry/proximity:obj_to_surface_mesh",
+        "//geometry/proximity:polygon_to_triangle_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "utilities",
+    srcs = ["utilities.cc"],
+    hdrs = ["utilities.h"],
+    deps = [
+        "//common",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "rgba",
+    srcs = ["rgba.cc"],
+    hdrs = ["rgba.h"],
+    deps = [
+        "//common",
+        "@fmt",
+    ],
+)
+
+genrule(
+    name = "meshcat_ico_genrule",
+    srcs = ["//doc:favicon.ico"],
+    outs = ["meshcat.ico"],
+    cmd = "cp $< $@",
+    visibility = ["//visibility:private"],
+)
+
+genrule(
+    name = "meshcat_js_genrule",
+    srcs = ["@meshcat//:dist/main.min.js"],
+    outs = ["meshcat.js"],
+    cmd = "cp $< $@",
+    visibility = ["//visibility:private"],
+)
+
+filegroup(
+    name = "meshcat_resources",
+    srcs = [
+        "meshcat.html",
+        ":meshcat.ico",
+        ":meshcat.js",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+install_files(
+    name = "install_meshcat_resources",
+    dest = "share/drake/geometry",
+    files = [":meshcat_resources"],
+)
+
+drake_cc_library(
+    name = "meshcat_animation",
+    srcs = ["meshcat_animation.cc"],
+    hdrs = ["meshcat_animation.h"],
+    deps = [
+        "//common:string_container",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_animation_test",
+    deps = [
+        ":meshcat_animation",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat_zip_factory_internal",
+    srcs = ["meshcat_zip_factory_internal.cc"],
+    hdrs = ["meshcat_zip_factory_internal.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        "//common:essential",
+    ],
+    implementation_deps = [
+        "@libzip_internal//:libzip",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat",
+    srcs = [
+        "meshcat.cc",
+        "meshcat_file_storage_internal.cc",
+        "meshcat_internal.cc",
+        "meshcat_recording_internal.cc",
+        "meshcat_types_internal.cc",
+    ],
+    hdrs = [
+        "meshcat.h",
+        "meshcat_file_storage_internal.h",
+        "meshcat_internal.h",
+        "meshcat_params.h",
+        "meshcat_recording_internal.h",
+        "meshcat_types_internal.h",
+    ],
+    data = [":meshcat_resources"],
+    install_hdrs_exclude = [
+        "meshcat_internal.h",
+        "meshcat_recording_internal.h",
+        "meshcat_types_internal.h",
+    ],
+    deps = [
+        ":geometry_ids",
+        ":meshcat_animation",
+        ":meshcat_zip_factory_internal",
+        ":rgba",
+        ":scene_graph_inspector",
+        ":shape_specification",
+        "//common:essential",
+        "//common:memory_file",
+        "//common:name_value",
+        "//common:timer",
+        "//geometry/proximity:triangle_surface_mesh",
+        "//math:geometric_transform",
+        "//perception:point_cloud",
+    ],
+    implementation_deps = [
+        "//common:drake_export",
+        "//common:find_resource",
+        "//common:network_policy",
+        "//common:scope_exit",
+        "//common:sha256",
+        "//geometry/proximity:polygon_to_triangle_mesh",
+        "//systems/analysis:realtime_rate_calculator",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+        "@msgpack_internal//:msgpack",
+        "@nlohmann_internal//:nlohmann",
+        "@stduuid_internal//:stduuid",
+        "@uwebsockets_internal//:uwebsockets",
+    ],
+)
+
+drake_cc_binary(
+    name = "meshcat_manual_test",
+    testonly = True,
+    srcs = ["test/meshcat_manual_test.cc"],
+    data = [
+        ":environment_maps",
+        "//examples/kuka_iiwa_arm:models",
+        "//examples/scene_graph:models",
+        "//geometry/render:test_models",
+        "//multibody/meshcat:models",
+        "@drake_models//:iiwa_description",
+        "@drake_models//:ycb",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":meshcat",
+        ":meshcat_visualizer",
+        "//common:add_text_logging_gflags",
+        "//common/test_utilities:maybe_pause_for_user",
+        "//multibody/meshcat:contact_visualizer",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+    ],
+)
+
+drake_py_binary(
+    name = "meshcat_websocket_client",
+    testonly = True,
+    srcs = ["test/meshcat_websocket_client.py"],
+    visibility = [
+        "//bindings/pydrake/visualization:__pkg__",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_zip_factory_internal_test",
+    deps = [
+        ":meshcat_zip_factory_internal",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_test",
+    data = [
+        ":environment_maps",
+        ":meshcat_websocket_client",
+        "//geometry/render:test_models",
+    ],
+    # Network settings cause this test to occasionally fail in macOS CI.
+    flaky = True,
+    tags = [
+        "cpu:2",
+    ],
+    deps = [
+        ":meshcat",
+        "//common:temp_directory",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "@msgpack_internal//:msgpack",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_file_storage_internal_test",
+    tags = ["cpu:2"],
+    deps = [
+        ":meshcat",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_internal_test",
+    data = [
+        "//geometry/render:test_models",
+    ],
+    deps = [
+        ":geometry_instance",
+        ":meshcat",
+        ":scene_graph",
+        ":shape_specification",
+        "//math:geometric_transform",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_recording_internal_test",
+    deps = [
+        ":meshcat",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_params_test",
+    deps = [
+        ":meshcat",
+        "//common/yaml:yaml_io",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_denied_test",
+    allow_network = ["none"],
+    deps = [
+        ":meshcat",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat_point_cloud_visualizer",
+    srcs = ["meshcat_point_cloud_visualizer.cc"],
+    hdrs = ["meshcat_point_cloud_visualizer.h"],
+    deps = [
+        ":meshcat",
+        ":meshcat_graphviz",
+        ":rgba",
+        ":utilities",
+        "//perception:point_cloud",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_point_cloud_visualizer_test",
+    deps = [
+        ":meshcat_point_cloud_visualizer",
+        "//common/test_utilities:expect_throws_message",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram_builder",
+        "//systems/primitives:constant_value_source",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat_graphviz",
+    srcs = ["meshcat_graphviz.cc"],
+    hdrs = ["meshcat_graphviz.h"],
+    deps = [
+        "//systems/framework:system_base",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_graphviz_test",
+    deps = [
+        ":meshcat_graphviz",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat_visualizer_params",
+    hdrs = ["meshcat_visualizer_params.h"],
+    deps = [
+        ":geometry_roles",
+        ":rgba",
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "meshcat_visualizer",
+    srcs = ["meshcat_visualizer.cc"],
+    hdrs = ["meshcat_visualizer.h"],
+    deps = [
+        ":geometry_roles",
+        ":meshcat",
+        ":meshcat_graphviz",
+        ":meshcat_visualizer_params",
+        ":rgba",
+        ":scene_graph",
+        "//common:essential",
+        "//geometry/proximity:polygon_to_triangle_mesh",
+        "//math:geometric_transform",
+        "//systems/framework:context",
+        "//systems/framework:diagram_builder",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "meshcat_visualizer_test",
+    data = [
+        "//geometry/render:test_models",
+        "//multibody/meshcat:models",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":meshcat_visualizer",
+        "//common:timer",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/primitives:constant_vector_source",
+        "@msgpack_internal//:msgpack",
+    ],
+)
+
+drake_cc_library(
+    name = "vtk_gltf_uri_loader",
+    srcs = ["vtk_gltf_uri_loader.cc"],
+    hdrs = ["vtk_gltf_uri_loader.h"],
+    internal = True,
+    visibility = [
+        "//geometry:__subpackages__",
+    ],
+    deps = [
+        ":mesh_source",
+        "//common:drake_export",
+        "//common:essential",
+        "//common:memory_file",
+        "//common:overloaded",
+        "@vtk_internal//:vtkIOCore",
+    ],
+)
+
+# -----------------------------------------------------
+
+filegroup(
+    name = "test_gltf_files",
+    testonly = 1,
+    srcs = [
+        "test/cube_with_hole.bin",
+        "test/cube_with_hole.gltf",
+        "test/rotated_cube_squished.bin",
+        "test/rotated_cube_squished.gltf",
+        "test/rotated_cube_unit_scale.bin",
+        "test/rotated_cube_unit_scale.gltf",
+    ],
+)
+
+filegroup(
+    name = "test_obj_files",
+    testonly = 1,
+    srcs = [
+        "test/bad_geometry_volume_zero.obj",
+        "test/convex.obj",
+        "test/cube_corners.obj",
+        "test/cube_with_hole.obj",
+        "test/non_convex_mesh.obj",
+        "test/octahedron.mtl",
+        "test/octahedron.obj",
+        "test/quad_cube.mtl",
+        "test/quad_cube.obj",
+        "test/rotated_cube.mtl",
+        "test/rotated_cube_squished.obj",
+        "test/rotated_cube_unit_scale.obj",
+        "test/two_cube_objects.obj",
+        "test/two_inverted_faces.obj",
+    ],
+)
+
+filegroup(
+    name = "test_vtk_files",
+    testonly = 1,
+    srcs = [
+        "test/cube_as_6_squares.vtk",
+        "test/cube_as_volume.vtk",
+        "test/inflation_infeasible_vertex.vtk",
+        "test/non_convex_mesh.vtk",
+        "test/one_negative_tetrahedron.vtk",
+        "test/one_tetrahedron.vtk",
+        "test/some_volume.vtk",
+        "test/two_tetrahedra_with_field_variable.vtk",
+        "test/unstructured.vtk",
+    ],
+)
+
+filegroup(
+    name = "test_stl_files",
+    testonly = 1,
+    srcs = [
+        "test/quad_cube.stl",
+    ],
+)
+
+filegroup(
+    name = "environment_maps",
+    testonly = 1,
+    srcs = [
+        "test/env_256_brick_room.jpg",
+        "test/env_256_cornell_box.hdr",
+        "test/env_256_cornell_box.png",
+        "test/env_256_six_color_room.hdr",
+        "test/env_256_six_color_room.png",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_filter_declaration_test",
+    deps = [
+        ":collision_filter_declaration",
+        ":geometry_ids",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_filter_manager_test",
+    deps = [
+        ":collision_filter_manager",
+        ":scene_graph",
+        "//common/test_utilities:expect_no_throw",
+    ],
+)
+
+drake_cc_googletest(
+    name = "deformable_mesh_with_bvh_test",
+    deps = [
+        ":deformable_mesh_with_bvh",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry/proximity:make_box_mesh",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_visualizer_test",
+    data = ["//geometry/render:test_models"],
+    deps = [
+        ":drake_visualizer",
+        ":read_gltf_to_memory",
+        "//common:find_resource",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//lcm",
+        "//lcmtypes:lcmtypes_drake_cc",
+        "//systems/analysis:simulator",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+drake_cc_googletest(
+    name = "mesh_source_test",
+    deps = [
+        ":in_memory_mesh",
+        ":mesh_source",
+    ],
+)
+
+drake_cc_googletest(
+    name = "proximity_engine_test",
+    data = [
+        ":test_obj_files",
+        ":test_vtk_files",
+    ],
+    deps = [
+        ":geometry_state",
+        ":proximity_engine",
+        ":shape_specification",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry/proximity:hydroelastic_calculator",
+        "//geometry/proximity:make_sphere_mesh",
+        "//math",
+        "@fcl_internal//:fcl",
+    ],
+)
+
+drake_cc_googletest(
+    name = "kinematics_vector_test",
+    deps = [
+        ":kinematics_vector",
+        "//common/test_utilities",
+        "//common/test_utilities:limit_malloc",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_frame_test",
+    deps = [
+        ":geometry_frame",
+        "//common:essential",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_instance_test",
+    deps = [
+        ":geometry_instance",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_properties_test",
+    deps = [
+        ":geometry_properties",
+        "//common/test_utilities",
+        "//common/test_utilities:limit_malloc",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_roles_test",
+    deps = [
+        ":geometry_roles",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_version_test",
+    deps = [
+        ":geometry_version",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_set_test",
+    deps = [
+        ":geometry_ids",
+        ":geometry_set",
+        "//common/test_utilities:expect_no_throw",
+        "//geometry/test_utilities:geometry_set_tester",
+    ],
+)
+
+drake_cc_googletest(
+    name = "geometry_state_test",
+    data = ["//geometry:test_obj_files"],
+    deps = [
+        ":geometry_state",
+        "//common/test_utilities",
+        "//geometry/proximity:make_sphere_mesh",
+        "//geometry/test_utilities:dummy_render_engine",
+    ],
+)
+
+drake_cc_googletest(
+    name = "in_memory_mesh_test",
+    deps = [
+        ":in_memory_mesh",
+    ],
+)
+
+drake_cc_googletest(
+    name = "read_gltf_to_memory_test",
+    data = [
+        "//geometry:test_gltf_files",
+        "//geometry/render:test_models",
+    ],
+    deps = [
+        ":read_gltf_to_memory",
+        "//common:find_resource",
+        "//common:temp_directory",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "make_mesh_for_deformable_test",
+    data = [
+        ":test_vtk_files",
+    ],
+    deps = [
+        ":make_mesh_for_deformable",
+        "//common:find_resource",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "mesh_deformation_interpolator_test",
+    deps = [
+        ":mesh_deformation_interpolator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry/proximity:make_sphere_mesh",
+    ],
+)
+
+drake_cc_googletest(
+    name = "poisson_disk_test",
+    deps = [
+        ":poisson_disk",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "proximity_properties_test",
+    deps = [
+        ":geometry_roles",
+        ":proximity_properties",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_geometry_test",
+    deps = [
+        ":internal_geometry",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry/proximity:make_sphere_mesh",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scene_graph_config_test",
+    deps = [
+        ":scene_graph_config",
+        "//common/test_utilities:expect_throws_message",
+        "//common/yaml",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scene_graph_test",
+    data = [
+        ":test_obj_files",
+        ":test_vtk_files",
+    ],
+    deps = [
+        ":scene_graph",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry/test_utilities:dummy_render_engine",
+    ],
+)
+
+drake_cc_googletest(
+    name = "query_object_test",
+    deps = [
+        ":geometry_frame",
+        ":geometry_instance",
+        ":scene_graph",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scene_graph_inspector_test",
+    deps = [
+        ":geometry_frame",
+        ":scene_graph_inspector",
+    ],
+)
+
+drake_cc_googletest(
+    name = "shape_specification_thread_test",
+    data = [
+        "//examples/multibody/deformable:torus_tet_mesh",
+        "@drake_models//:dishes",
+        "@drake_models//:tri_homecart",
+    ],
+    tags = [
+        "cpus:4",
+    ],
+    deps = [
+        ":shape_specification",
+        "//common:find_resource",
+        "//common:find_runfiles",
+    ],
+)
+
+drake_cc_googletest(
+    name = "shape_specification_test",
+    data = [
+        ":test_obj_files",
+        ":test_stl_files",
+        ":test_vtk_files",
+    ],
+    deps = [
+        ":shape_specification",
+        "//common:find_resource",
+        "//common:overloaded",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "utilities_test",
+    deps = [
+        "utilities",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rgba_test",
+    deps = [
+        ":rgba",
+        "//common/test_utilities",
+        "//common/yaml:yaml_io",
+    ],
+)
+
+drake_cc_googletest(
+    name = "read_obj_test",
+    data = [":test_obj_files"],
+    deps = [
+        ":read_obj",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+install(
+    name = "install",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":install_meshcat_resources",
+    ],
+)
+
+add_lint_tests()

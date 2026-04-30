@@ -1,0 +1,24 @@
+Add a drake_vendor namespace ala tools/workspace/vendor_cxx
+
+This prevents link-time symbol conflicts in case code downstream of
+Drake wants to use a different build of nanoflann.
+
+Reasoning for not upstreaming this patch: Drake-specific vendoring.
+
+--- include/nanoflann.hpp.orig
++++ include/nanoflann.hpp
+@@ -97,6 +97,7 @@
+ #define NANOFLANN_NODE_ALIGNMENT 16
+ #endif
+
++inline namespace drake_vendor __attribute__ ((visibility ("hidden"))) {
+ namespace nanoflann
+ {
+ /** @addtogroup nanoflann_grp nanoflann C++ library for KD-trees
+@@ -2809,5 +2810,6 @@ struct KDTreeEigenMatrixAdaptor
+
+ /** @} */  // end of grouping
+ }  // namespace nanoflann
++}  // namespace drake_vendor
+
+ #undef NANOFLANN_RESTRICT

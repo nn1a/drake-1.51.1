@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<sdf xmlns:drake="http://drake.mit.edu" version="1.7">
+  <model name="test_robot">
+    <!-- This sdf file defines a simple test robot with a single link that
+         contains one visual tag for each supported geometry type. We're
+         confirming that each geometry declaration produces a corresponding
+         Drake Shape. The *names* of each visual element match the string
+         that is produced by `Shape::type_name()` (see shape_specification.h).
+         This is to facilitate testing and altering the names will cause the
+         test to fail.
+         Values in <inertial> are not important for this test model since
+         it's only to test the parsing of visuals and collisions into a
+         MultibodyPlant.
+         This file is meant to be kept in sync with the corresponding unit
+         test file detail_sdf_parser_test.cc -->
+    <!-- We will define the model frame as `M`. The parent, which tends to be
+         the world, will be denoted as `P`.
+         Because there is no <pose> tag at the root level, `X_PM` will be
+         identity. -->
+    <link name="link1">
+      <visual name="Box">
+        <geometry>
+          <box>
+            <size>1.0 2.0 3.0</size>
+          </box>
+        </geometry>
+      </visual>
+      <!-- This element is for testing the standard <capsule> spelling. -->
+      <!-- Immediately below, we also test the <drake:capsule> spelling. -->
+      <visual name="Capsule">
+        <geometry>
+          <capsule>
+            <length>1</length>
+            <radius>0.1</radius>
+          </capsule>
+        </geometry>
+      </visual>
+      <!-- This element is for testing the <drake:capsule> spelling. -->
+      <!-- Immediately above, we tested the standard <capsule> spelling. -->
+      <!-- TODO(azeey): We should deprecate use of <drake:capsule>
+        per https://github.com/RobotLocomotion/drake/issues/14837 -->
+      <visual name="DrakeCapsule">
+        <geometry>
+          <drake:capsule>
+            <length>1</length>
+            <radius>0.1</radius>
+          </drake:capsule>
+        </geometry>
+      </visual>
+      <visual name="CapsuleSdf">
+        <geometry>
+          <capsule>
+            <length>1</length>
+            <radius>0.1</radius>
+          </capsule>
+        </geometry>
+      </visual>
+      <visual name="Convex">
+        <geometry>
+          <mesh>
+            <drake:declare_convex/>
+            <uri>package://drake/multibody/parsing/test/tri_cube.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="Cylinder">
+        <geometry>
+          <cylinder>
+            <length>1</length>
+            <radius>0.1</radius>
+          </cylinder>
+        </geometry>
+      </visual>
+      <!-- This element is for testing the standard <ellipsoid> spelling. -->
+      <!-- Immediately below, we also test the <drake:ellipsoid> spelling. -->
+      <visual name="Ellipsoid">
+        <geometry>
+          <ellipsoid>
+            <radii>1.0 2.0 3.0</radii>
+          </ellipsoid>
+        </geometry>
+      </visual>
+      <!-- This element is for testing the <drake:ellipsoid> spelling. -->
+      <!-- Immediately above, we tested the standard <ellipsoid> spelling. -->
+      <!-- TODO(azeey): We should deprecate use of <drake:ellipsoid>
+        per https://github.com/RobotLocomotion/drake/issues/14837 -->
+      <visual name="DrakeEllipsoid">
+        <geometry>
+          <drake:ellipsoid>
+            <a>1.0</a>
+            <b>2.0</b>
+            <c>3.0</c>
+          </drake:ellipsoid>
+        </geometry>
+      </visual>
+      <visual name="EllipsoidSdf">
+        <geometry>
+          <ellipsoid>
+            <radii>1.0 2.0 3.0</radii>
+          </ellipsoid>
+        </geometry>
+      </visual>
+      <visual name="Mesh">
+        <geometry>
+          <mesh>
+            <uri>package://drake/multibody/parsing/test/tri_cube.obj</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <visual name="HalfSpace">
+        <geometry>
+          <plane>
+            <normal>1.0 2.0 3.0</normal>
+          </plane>
+        </geometry>
+      </visual>
+      <visual name="Sphere">
+        <geometry>
+          <sphere>
+            <radius>1.0</radius>
+          </sphere>
+        </geometry>
+      </visual>
+    </link>
+    <!-- Ensure we can weld to the world. -->
+    <joint name="weld_link1" type="fixed">
+      <parent>world</parent>
+      <child>link1</child>
+    </joint>
+  </model>
+</sdf>

@@ -1,0 +1,180 @@
+load("//bindings/pydrake:pydrake.bzl", "add_lint_tests_pydrake")
+load("//tools/install:install.bzl", "install")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_unittest",
+)
+load(
+    "//tools/skylark:pybind.bzl",
+    "drake_pybind_library",
+    "get_drake_py_installs",
+    "get_pybind_package_info",
+)
+
+package(default_visibility = [
+    "//bindings/pydrake:__subpackages__",
+])
+
+# This determines how `PYTHONPATH` is configured, and how to install the
+# bindings.
+# TODO(eric.cousineau): address
+# https://github.com/RobotLocomotion/drake/issues/12055
+PACKAGE_INFO = get_pybind_package_info("//bindings")
+
+drake_pybind_library(
+    name = "planning",
+    cc_deps = [
+        "//bindings/generated_docstrings:planning",
+        "//bindings/generated_docstrings:planning_graph_algorithms",
+        "//bindings/generated_docstrings:planning_iris",
+        "//bindings/generated_docstrings:planning_locomotion",
+        "//bindings/generated_docstrings:planning_trajectory_optimization",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:ref_cycle_pybind",
+        "//bindings/pydrake/common:wrap_pybind",
+        "//bindings/pydrake/geometry:optimization_pybind",
+        "//bindings/pydrake/systems:builder_life_support_pybind",
+    ],
+    cc_so_name = "__init__",
+    cc_srcs = [
+        "planning_py.h",
+        "planning_py.cc",
+        "planning_py_collision_checker.cc",
+        "planning_py_collision_checker_interface_types.cc",
+        "planning_py_dof_mask.cc",
+        "planning_py_graph_algorithms.cc",
+        "planning_py_iris_common.cc",
+        "planning_py_iris_from_clique_cover.cc",
+        "planning_py_iris_np2.cc",
+        "planning_py_iris_zo.cc",
+        "planning_py_joint_limits.cc",
+        "planning_py_robot_diagram.cc",
+        "planning_py_trajectory_optimization.cc",
+        "planning_py_visibility_graph.cc",
+        "planning_py_zmp_planner.cc",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        "//bindings/pydrake/geometry",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+        "//bindings/pydrake/multibody:rational_py",
+        "//bindings/pydrake/systems:framework_py",
+        "//bindings/pydrake/systems:primitives_py",
+        "//bindings/pydrake/solvers",
+        "//bindings/pydrake:trajectories_py",
+    ],
+)
+
+install(
+    name = "install",
+    targets = [":planning"],
+    py_dest = PACKAGE_INFO.py_dest,
+    deps = get_drake_py_installs([":planning"]),
+)
+
+drake_py_unittest(
+    name = "collision_checker_test",
+    data = [
+        "//multibody:models",
+        "//planning/test_utilities:collision_ground_plane.sdf",
+    ],
+    num_threads = 2,
+    deps = [
+        ":planning",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "collision_checker_trace_test",
+    data = [
+        "//multibody:models",
+        "//planning/test_utilities:collision_ground_plane.sdf",
+    ],
+    num_threads = 2,
+    deps = [
+        ":planning",
+    ],
+)
+
+drake_py_unittest(
+    name = "dof_mask_test",
+    deps = [
+        ":planning",
+    ],
+)
+
+drake_py_unittest(
+    name = "robot_diagram_test",
+    data = [
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":planning",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/systems:controllers_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "trajectory_optimization_test",
+    data = [
+        "//examples/multibody/cart_pole:models",
+    ],
+    deps = [
+        ":planning",
+        "//bindings/pydrake/examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "graph_algorithms_test",
+    deps = [
+        ":planning",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "iris_from_clique_cover_test",
+    data = [
+        "//multibody:models",
+        "//planning/test_utilities:collision_ground_plane.sdf",
+    ],
+    num_threads = 2,
+    deps = [
+        ":planning",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "iris_test",
+    num_threads = 2,
+    deps = [
+        ":planning",
+        "//bindings/pydrake/multibody:inverse_kinematics_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "joint_limits_test",
+    deps = [
+        ":planning",
+    ],
+)
+
+drake_py_unittest(
+    name = "zmp_planner_test",
+    deps = [
+        ":planning",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+add_lint_tests_pydrake()

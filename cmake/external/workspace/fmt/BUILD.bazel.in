@@ -1,0 +1,24 @@
+# -*- bazel -*-
+
+load(":cc.bzl", "cc_library")
+load(":conversion.bzl", "split_cmake_list")
+
+_DEFINES = split_cmake_list(
+    "$<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>",
+)
+
+cc_library(
+    name = "fmt",
+    srcs = glob(
+        ["lib/**"],
+        allow_empty = False,
+    ),
+    hdrs = glob(
+        ["include/fmt/**"],
+        allow_empty = False,
+    ),
+    defines = _DEFINES,
+    includes = ["include"],
+    isystem = True,
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,459 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_optional.bzl",
+    "drake_cc_optional_library",
+    "drake_cc_variant_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_unittest",
+)
+load("//tools/skylark:test_tags.bzl", "vtk_test_tags")
+
+# This render_gltf_client package is only implemented when
+# //tools/flags:with_render_gltf_client is True. When False, only the factory
+# is available and it will always throw an exception. When True, the factory
+# is the sole public entry point, even though the implementation is made up of
+# several other distinct components.
+#
+# Only the package-level library //geometry/render_gltf_client is public as a
+# Bazel target; all of the other targets are private.
+
+package(default_visibility = ["//visibility:private"])
+
+filegroup(
+    name = "doxygen_input",
+    srcs = ["render_gltf_client_doxygen.h"],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+config_setting(
+    name = "enabled",
+    flag_values = {"//tools/flags:with_render_gltf_client": "True"},
+)
+
+drake_cc_package_library(
+    name = "render_gltf_client",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":factory",
+        ":render_engine_gltf_client_params",
+    ],
+)
+
+drake_cc_variant_library(
+    name = "factory",
+    opt_in_condition = ":enabled",
+    srcs_always = [],
+    srcs_enabled = ["factory.cc"],
+    srcs_disabled = ["no_factory.cc"],
+    hdrs = ["factory.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":render_engine_gltf_client_params",
+        "//geometry/render:render_engine",
+    ],
+    implementation_deps_always = [],
+    implementation_deps_enabled = [
+        ":internal_render_engine_gltf_client",
+        "//common:network_policy",
+    ],
+)
+
+drake_cc_library(
+    name = "render_engine_gltf_client_params",
+    srcs = ["render_engine_gltf_client_params.cc"],
+    hdrs = ["render_engine_gltf_client_params.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common:name_value",
+        "//geometry/render:render_label",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_http_service",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_http_service.cc"],
+    hdrs = ["internal_http_service.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//common:essential",
+    ],
+    implementation_deps = [
+        "@fmt",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_http_service_curl",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_http_service_curl.cc"],
+    hdrs = ["internal_http_service_curl.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":internal_http_service",
+    ],
+    implementation_deps = [
+        "//common:unused",
+        "@curl_internal//:libcurl",
+        "@fmt",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_render_client",
+    opt_in_condition = ":enabled",
+    srcs = [
+        "internal_render_client.cc",
+    ],
+    hdrs = [
+        "internal_render_client.h",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":internal_http_service",
+        ":internal_http_service_curl",
+        ":render_engine_gltf_client_params",
+        "//common:sha256",
+        "//common:temp_directory",
+        "//geometry/render:render_camera",
+        "//geometry/render:render_engine",
+        "//systems/sensors:image",
+        "//systems/sensors:image_io",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_render_engine_gltf_client",
+    opt_in_condition = ":enabled",
+    srcs = [
+        "internal_render_engine_gltf_client.cc",
+    ],
+    hdrs = [
+        "internal_render_engine_gltf_client.h",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":internal_merge_gltf",
+        ":internal_render_client",
+        "//common:essential",
+        "//common:find_resource",
+        "//common/yaml:yaml_io",
+        "//geometry/render:render_camera",
+        "//geometry/render_vtk:internal_render_engine_vtk",
+        "//systems/sensors:image",
+        "@common_robotics_utilities_internal//:common_robotics_utilities",
+        "@nlohmann_internal//:nlohmann",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonMath",
+        "@vtk_internal//:vtkIOExport",
+        "@vtk_internal//:vtkRenderingCore",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_merge_gltf",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_merge_gltf.cc"],
+    hdrs = ["internal_merge_gltf.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//common:drake_export",
+        "//common:essential",
+        "//common:find_resource",
+        "//geometry:mesh_source",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "factory_test",
+    allow_network = ["render_gltf_client"],
+    deps = [
+        ":factory",
+        ":internal_render_engine_gltf_client",
+        ":render_engine_gltf_client_params",
+        "//geometry/render:render_camera",
+    ],
+)
+
+# N.B. This test asserts that the factory throws because of DRAKE_ALLOW_NETWORK.
+# Separately, we'll test that the factory throws because it's disabled via
+# :enabled via the below :internal_no_render_gltf_client_test.
+drake_cc_googletest(
+    name = "factory_denied_test",
+    allow_network = ["none"],
+    deps = [
+        ":factory",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+# N.B. This test asserts that the no_factory flavor throws unconditionally.
+drake_cc_googletest(
+    name = "internal_no_render_gltf_client_test",
+    deps = [
+        # The ":factory_disabled" target is created by the
+        # drake_cc_variant_library(...) stanza above.
+        ":factory_disabled",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_engine_gltf_client_params_test",
+    deps = [
+        ":render_engine_gltf_client_params",
+        "//common/yaml",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_http_service_test",
+    deps = [
+        ":internal_http_service",
+        "//common:temp_directory",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_http_service_curl_test",
+    deps = [
+        ":internal_http_service_curl",
+        "//common:temp_directory",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+filegroup(
+    name = "test_resources",
+    srcs = [
+        "test/test_colored_label_rgba_8U.png",
+        "test/test_depth_16U.png",
+        "test/test_depth_16U.tiff",
+        "test/test_depth_32F.tiff",
+        "test/test_rgb_8U.png",
+        "test/test_rgba_8U.png",
+        "test/tri.obj",
+        "test/tri_tree.gltf",
+    ],
+)
+
+drake_cc_library(
+    name = "internal_sample_image_data",
+    testonly = True,
+    srcs = ["test/internal_sample_image_data.cc"],
+    hdrs = ["test/internal_sample_image_data.h"],
+    deps = [
+        "//geometry/render:render_label",
+        "//systems/sensors:image",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_render_client_test",
+    data = [
+        ":test_resources",
+    ],
+    deps = [
+        ":internal_render_client",
+        ":internal_sample_image_data",
+        "//common:find_resource",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//systems/sensors/test_utilities:image_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_render_engine_gltf_client_test",
+    data = [
+        ":test_resources",
+        "//geometry/render:test_models",
+    ],
+    tags = vtk_test_tags(),
+    deps = [
+        ":internal_render_engine_gltf_client",
+        ":internal_sample_image_data",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//systems/sensors/test_utilities:image_compare",
+        "@nlohmann_internal//:nlohmann",
+        "@vtk_internal//:vtkCommonMath",
+        "@vtk_internal//:vtkRenderingCore",
+    ],
+)
+
+drake_py_binary(
+    name = "server_demo",
+    testonly = True,
+    srcs = ["test/server_demo.py"],
+    data = [":server_vtk_backend"],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_cc_binary(
+    name = "server_vtk_backend",
+    testonly = True,
+    srcs = ["test/server_vtk_backend.cc"],
+    deps = [
+        "//geometry/render/shaders:depth_shaders",
+        "//geometry/render_vtk:factory",
+        "//geometry/render_vtk:internal_render_engine_vtk",
+        "//math:geometric_transform",
+        "//systems/sensors:image",
+        "@gflags",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonMath",
+        "@vtk_internal//:vtkIOImage",
+        "@vtk_internal//:vtkIOImport",
+        "@vtk_internal//:vtkRenderingCore",
+        "@vtk_internal//:vtkRenderingOpenGL2",
+    ],
+)
+
+filegroup(
+    name = "gltf_client_test_models",
+    testonly = True,
+    data = [
+        ":test/006_mustard_bottle.sdf",
+        ":test/4_color_texture.png",
+        ":test/example_scene.sdf",
+    ],
+    visibility = ["//:__pkg__"],
+)
+
+# The integration test was written using OBJ-based model files, so even though
+# our nominal mesh format is glTF now, we'll still use OBJ for our testing.
+genrule(
+    name = "gen_mustard_bottle",
+    srcs = ["@drake_models//:ycb/006_mustard_bottle.sdf"],
+    outs = ["test/006_mustard_bottle.sdf"],
+    cmd = "sed -e 's#\\.gltf#.obj#g;' $< > $@",
+)
+
+drake_cc_binary(
+    name = "client_demo",
+    testonly = True,
+    srcs = ["test/client_demo.cc"],
+    data = [
+        ":gltf_client_test_models",
+        "@drake_models//:ycb",
+    ],
+    deps = [
+        ":factory",
+        "//geometry:drake_visualizer",
+        "//geometry:scene_graph",
+        "//geometry/render_vtk",
+        "//lcm",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//systems/lcm:lcm_pubsub_system",
+        "//systems/primitives:constant_vector_source",
+        "//systems/sensors:image_to_lcm_image_array_t",
+        "//systems/sensors:image_writer",
+        "//systems/sensors:rgbd_sensor",
+        "@fmt",
+        "@gflags",
+    ],
+)
+
+drake_py_unittest(
+    name = "acceptance_test",
+    allow_network = ["render_gltf_client"],
+    data = [
+        ":client_demo",
+        ":server_demo",
+        ":server_vtk_backend",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_unittest(
+    name = "integration_test",
+    size = "medium",
+    allow_network = ["render_gltf_client"],
+    data = [
+        ":client_demo",
+        ":server_demo",
+        ":test/test_color_scene.gltf",
+        ":test/test_depth_scene.gltf",
+        ":test/test_label_scene.gltf",
+    ],
+    # The image differencing fails occasionally in macOS CI, but it's not
+    # reproducible locally. See 18134 for more details.
+    flaky = True,
+    tags = [
+        "cpu:2",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+filegroup(
+    name = "merge_resources",
+    srcs = [
+        "test/red_box.gltf",
+        "test/textured_green_box.gltf",
+    ],
+    visibility = ["//:__pkg__"],
+)
+
+drake_cc_googletest(
+    name = "internal_merge_gltf_test",
+    data = [
+        ":merge_resources",
+        "//geometry/render:test_models",
+    ],
+    deps = [
+        ":internal_merge_gltf",
+        "//common:find_resource",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "@nlohmann_internal//:nlohmann",
+    ],
+)
+
+filegroup(
+    name = "all_gltfs_and_images",
+    testonly = True,
+    srcs = glob([
+        "test/*.gltf",
+        "test/*.png",
+        "test/*.tiff",
+    ]),
+)
+
+drake_py_unittest(
+    name = "file_size_test",
+    data = [
+        ":all_gltfs_and_images",
+    ],
+    deps = [
+        "@rules_python//python/runfiles",
+    ],
+)
+
+add_lint_tests()

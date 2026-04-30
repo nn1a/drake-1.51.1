@@ -1,0 +1,26 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+load("@drake//tools/skylark:cc.bzl", "cc_library")
+
+licenses(["notice"])  # zlib
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "tinyxml2",
+    hdrs = ["tinyxml2.h"],
+    srcs = ["tinyxml2.cpp"],
+    includes = ["."],
+    isystem = True,
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+)
+
+install(
+    name = "install",
+    docs = ["LICENSE.txt"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["drake_repository_metadata.json"])

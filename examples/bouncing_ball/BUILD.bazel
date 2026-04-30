@@ -1,0 +1,35 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+drake_cc_library(
+    name = "bouncing_ball",
+    srcs = ["bouncing_ball.cc"],
+    hdrs = [
+        "bouncing_ball.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "bouncing_ball_test",
+    deps = [
+        ":bouncing_ball",
+        "//systems/analysis:runge_kutta3_integrator",
+        "//systems/analysis:simulator",
+        "//systems/framework/test_utilities",
+    ],
+)
+
+add_lint_tests()

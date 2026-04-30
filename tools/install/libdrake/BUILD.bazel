@@ -1,0 +1,440 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+load(
+    "@drake//tools/workspace:cmake_configure_file.bzl",
+    "cmake_configure_file",
+)
+load(
+    "//third_party:com_github_bazelbuild_rules_cc/whole_archive.bzl",
+    "cc_whole_archive_library",
+)
+load(
+    "//tools/install:install.bzl",
+    "install",
+    "install_cmake_config",
+    "install_files",
+)
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:cc.bzl", "cc_binary", "cc_library", "cc_static_library")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_test",
+    "drake_transitive_installed_hdrs_filegroup",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_unittest",
+)
+load("//tools/workspace:generate_file.bzl", "generate_file")
+load(":build_components.bzl", "LIBDRAKE_COMPONENTS")
+load(":cc_defines.bzl", "cc_defines")
+load(":header_lint.bzl", "cc_check_allowed_headers")
+
+package(default_visibility = ["//visibility:private"])
+
+generate_file(
+    name = "drake_install_java.cmake",
+    content = select({
+        "//lcmtypes:flag_install_java_true": (
+            "set(DRAKE_INSTALL_JAVA ON)"
+        ),
+        "//conditions:default": (
+            "set(DRAKE_INSTALL_JAVA OFF)"
+        ),
+    }),
+)
+
+config_setting(
+    name = "install_python_false",
+    flag_values = {
+        "//tools/flags:install_python": "False",
+    },
+)
+
+genrule(
+    name = "python_version_cmake",
+    srcs = ["//tools/workspace/python:python_version.txt"],
+    outs = ["python_version.cmake"],
+    cmd = select({
+        ":install_python_false": """echo "set(PYTHON_VERSION OFF)" > $@""",
+        "//conditions:default": """echo "set(PYTHON_VERSION \\"$$(cat $<)\\")" > $@""",  # noqa
+    }),
+)
+
+genrule(
+    name = "stamp_version",
+    outs = ["stamp_version.txt"],
+    cmd_bash = "sed -n '/^STABLE_VERSION/p' bazel-out/stable-status.txt > $@",
+    stamp = 1,
+)
+
+drake_py_binary(
+    name = "parse_version",
+    srcs = ["parse_version.py"],
+)
+
+run_binary(
+    name = "drake_parse_version_stamp",
+    srcs = ["stamp_version.txt"],
+    outs = ["stamp_version.cmake"],
+    args = [
+        "$(location stamp_version.txt)",
+        "$(location stamp_version.cmake)",
+    ],
+    tool = "parse_version",
+)
+
+generate_file(
+    name = "with_lcm_runtime.cmake",
+    content = select({
+        "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": (
+            "set(WITH_LCM_RUNTIME ON)"
+        ),
+        "//conditions:default": (
+            "set(WITH_LCM_RUNTIME OFF)"
+        ),
+    }),
+)
+
+generate_file(
+    name = "with_user_eigen.cmake",
+    content = select({
+        "//tools/workspace/eigen:is_external": (
+            "set(WITH_USER_EIGEN ON)"
+        ),
+        "//conditions:default": (
+            "set(WITH_USER_EIGEN OFF)"
+        ),
+    }),
+)
+
+generate_file(
+    name = "with_user_fmt.cmake",
+    content = select({
+        "//tools/workspace/fmt:is_external": (
+            "set(WITH_USER_FMT ON)"
+        ),
+        "//conditions:default": (
+            "set(WITH_USER_FMT OFF)"
+        ),
+    }),
+)
+
+generate_file(
+    name = "with_user_spdlog.cmake",
+    content = select({
+        "//tools/workspace/spdlog:is_external": (
+            "set(WITH_USER_SPDLOG ON)"
+        ),
+        "//conditions:default": (
+            "set(WITH_USER_SPDLOG OFF)"
+        ),
+    }),
+)
+
+config_setting(
+    name = "install_libdrake_static",
+    flag_values = {"//tools/flags:install_libdrake": "static"},
+)
+
+generate_file(
+    name = "libdrake_was_linked_shared.cmake",
+    content = select({
+        ":install_libdrake_static": (
+            "set(LIBDRAKE_WAS_LINKED_SHARED OFF)"
+        ),
+        "//conditions:default": (
+            "set(LIBDRAKE_WAS_LINKED_SHARED ON)"
+        ),
+    }),
+)
+
+cc_defines(
+    name = "bazel_eigen_defines.cmake",
+    var = "BAZEL_EIGEN_DEFINES",
+    deps = ["@eigen"],
+)
+
+cc_defines(
+    name = "bazel_fmt_defines.cmake",
+    var = "BAZEL_FMT_DEFINES",
+    deps = ["@fmt"],
+)
+
+cc_defines(
+    name = "bazel_spdlog_defines.cmake",
+    var = "BAZEL_SPDLOG_DEFINES",
+    deps = ["@spdlog"],
+)
+
+cmake_configure_file(
+    name = "drake_config_cmake_expand",
+    src = "drake-config.cmake.in",
+    out = "drake-config.cmake",
+    atonly = True,
+    cmakelists = [
+        ":bazel_eigen_defines.cmake",
+        ":bazel_fmt_defines.cmake",
+        ":bazel_spdlog_defines.cmake",
+        ":drake_install_java.cmake",
+        ":libdrake_was_linked_shared.cmake",
+        ":python_version.cmake",
+        ":stamp_version.cmake",
+        ":with_lcm_runtime.cmake",
+        ":with_user_eigen.cmake",
+        ":with_user_fmt.cmake",
+        ":with_user_spdlog.cmake",
+    ],
+)
+
+install_cmake_config(
+    package = "drake",
+    versioned = False,
+)
+
+# Verify that extra include paths are not leaking into our interface deps.
+cc_check_allowed_headers(
+    name = "allowed_headers_lint",
+    deps = LIBDRAKE_COMPONENTS,
+)
+
+# Annotate all of the LIBDRAKE_COMPONENTS as `alwayslink = True`, so that we
+# use the --whole-archive linker flag on them when creating libdrake.so.
+cc_whole_archive_library(
+    name = "libdrake_components_whole_archive",
+    deps = LIBDRAKE_COMPONENTS,
+)
+
+# The Drake binary package libdrake.so contains all the symbols from all the
+# LIBDRAKE_COMPONENTS plus the statically-linked Drake externals used by the
+# LIBDRAKE_COMPONENTS.  We use linkstatic=1 here so that the library will not
+# contain any references to constituent shared libraries inside the build tree.
+cc_binary(
+    name = "libdrake.so",
+    linkopts = select({
+        "//tools/cc_toolchain:linux": ["-Wl,-soname,libdrake.so"],
+        "//conditions:default": [],
+    }),
+    linkshared = 1,
+    linkstatic = 1,
+    deps = [
+        ":libdrake_components_whole_archive",
+        ":libdrake_runtime_so_deps",
+    ],
+)
+
+# Gather all of libdrake's dependent headers.
+drake_transitive_installed_hdrs_filegroup(
+    name = "libdrake_headers",
+    never_startswith = [
+        # Drake's lcmtypes are installed via the //lcmtypes:install rule,
+        # because they part of a different CMake component than Drake's main
+        # C++ library.  They should not be part of libdrake's installed
+        # headers.  (For CMake details, refer to :drake-config.cmake.in.)
+        "lcmtypes/",
+    ],
+    visibility = [
+        "//doc/doxygen_cxx:__pkg__",
+    ],
+    deps = LIBDRAKE_COMPONENTS,
+)
+
+# Combine headers into a library with necessary dependencies, but not object
+# code. (For use with pybind documentation generation.)
+cc_library(
+    name = "drake_headers",
+    hdrs = [":libdrake_headers"],
+    include_prefix = "drake",
+    strip_include_prefix = "/",
+    visibility = [
+        "//bindings/generated_docstrings:__pkg__",
+    ],
+    deps = [
+        ":libdrake_header_only_deps",
+        ":libdrake_runtime_so_deps",
+    ],
+)
+
+# Also create libdrake_static_archive.a in addition to libdrake.so. We'll only
+# install one of them, but we want to build both of them during `test //...` to
+# ensure that both can build in CI without adding more CI job flavors.
+cc_static_library(
+    name = "libdrake_static_archive",
+    deps = LIBDRAKE_COMPONENTS,
+)
+
+# Our install.bzl doesn't know how to install cc_static_library targets, so we
+# need to install it as a plain file. Note that this rule only ends up being
+# run when //tools/flags:install_libdrake is set to "static".
+install_files(
+    name = "install_libdrake_static_archive",
+    dest = "lib",
+    files = [":libdrake_static_archive"],
+    rename = {
+        "lib/liblibdrake_static_archive.a": "libdrake.a",
+    },
+)
+
+# Install either libdrake.so or libdrake.a, depending on the flag setting.
+install(
+    name = "install_libdrake",
+    targets = select({
+        ":install_libdrake_static": [],
+        "//conditions:default": ["libdrake.so"],
+    }),
+    deps = select({
+        ":install_libdrake_static": [":install_libdrake_static_archive"],
+        "//conditions:default": [],
+    }),
+)
+
+# Install libdrake along with all transitive headers in the same workspace
+# (i.e. in Drake itself; not externals).
+install(
+    name = "install",
+    install_tests = [
+        "test/drake_python_dir_install_test.py",
+        "test/find_package_drake_install_test.py",
+        "test/snopt_visibility_install_test.py",
+        "test/rpath_install_test.py",
+    ],
+    hdrs = [":libdrake_headers"],
+    hdr_dest = "include/drake",
+    allowed_externals = ["//:LICENSE.TXT"],  # Root for our #include paths.
+    visibility = ["//:__pkg__"],
+    deps = [
+        ":install_cmake_config",
+        ":install_libdrake",
+    ],
+)
+
+# Depend on Gurobi's shared library iff Gurobi is enabled.
+cc_library(
+    name = "gurobi_deps",
+    deps = select({
+        "//tools/workspace/gurobi:enabled": ["@gurobi//:gurobi_c"],
+        "//conditions:default": [],
+    }),
+)
+
+# Depend on Mosek's shared library iff Mosek is enabled.
+cc_library(
+    name = "mosek_deps",
+    deps = select({
+        "//tools/workspace/mosek:enabled": ["@mosek"],
+        "//conditions:default": [],
+    }),
+)
+
+# Provide a cc_library target that provides libdrake.so, its headers, its
+# header-only dependencies, and its required *.so's.  This is aliased by
+# `//:drake_shared_library`, which is what downstream users will consume if
+# they wish to link to `libdrake.so`.
+cc_library(
+    name = "drake_shared_library",
+    srcs = [":libdrake.so"],
+    hdrs = [":libdrake_headers"],
+    # N.B. To pull in transitive `data` dependencies, we must list
+    # `libdrake.so` as a data target.
+    data = [":libdrake.so"],
+    include_prefix = "drake",
+    strip_include_prefix = "/",
+    visibility = ["//:__pkg__"],
+    deps = [
+        ":drake_headers",
+    ],
+)
+
+# The list of depended-on *.so files. These should ONLY be shared libraries; do
+# not add static dependencies here.
+#
+# TODO(jwnimmer-tri) Ideally, Bazel should be able to handle the depended-on
+# *.so files for us, without us having to know up-front here which dependencies
+# are coming from the WORKSPACE in the form of *.so.
+cc_library(
+    name = "libdrake_runtime_so_deps",
+    deps = [
+        ":gurobi_deps",
+        ":mosek_deps",
+        "//common:drake_marker_shared_library",
+        "//tools/workspace/fmt:shared_library_maybe",
+        "//tools/workspace/lcm_internal:shared_library_maybe",
+        "//tools/workspace/spdlog:shared_library_maybe",
+    ],
+)
+
+# The list of depended-on header-only libraries that libdrake's header files
+# depend on.  Do not add any object code (shared nor static) here.
+#
+# TODO(jwnimmer-tri) Ideally, drake_cc_library's installed_headers support
+# would capture a list of headerfile dependencies, so that we don't need to
+# write out the "list of libraries directly mentioned in Drake headers" below.
+cc_library(
+    name = "libdrake_header_only_deps",
+    deps = [
+        "//lcmtypes:lcmtypes_drake_cc",
+        "//tools/workspace/fmt:hdrs",
+        "//tools/workspace/spdlog:hdrs",
+        "@eigen",
+    ],
+)
+
+drake_cc_test(
+    name = "drake_shared_library_test",
+    # Using `drake_shared_library` can cause timeouts in debug mode.
+    timeout = "moderate",
+    deps = [":drake_shared_library"],
+)
+
+drake_cc_googletest(
+    name = "fast_math_test",
+    tags = ["no_kcov"],  # See #10788.
+    deps = [
+        "//:drake_shared_library",
+    ],
+)
+
+# The exported_symbols_test is skipped in some build configurations.
+selects.config_setting_group(
+    name = "skip_exported_symbols_test",
+    match_any = [
+        # Debug builds have a lot more symbols (no dead code elimination) so
+        # are too much work to tidy up.
+        "//tools/cc_toolchain:debug",
+    ],
+)
+
+drake_py_unittest(
+    name = "exported_symbols_test",
+    args = selects.with_or({
+        ":skip_exported_symbols_test": ["--help"],
+        "//conditions:default": [],
+    }),
+    data = [
+        ":libdrake.so",
+    ],
+    tags = ["no_kcov"],
+)
+
+drake_py_unittest(
+    name = "header_dependency_test",
+    args = [
+        "$(rootpaths :libdrake_headers)",
+    ],
+    data = [
+        ":libdrake_headers",
+    ],
+    tags = [
+        "lint",
+    ],
+)
+
+add_lint_tests(
+    python_lint_extra_srcs = [
+        "build_components_refresh.py",
+        "test/drake_python_dir_install_test.py",
+    ],
+)

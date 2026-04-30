@@ -1,0 +1,268 @@
+load("//doc:defs.bzl", "enumerate_filegroup")
+load("//tools/install:check_licenses.bzl", "check_licenses")
+load("//tools/install:install.bzl", "install")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+    "drake_py_test",
+)
+
+filegroup(
+    name = "drake_repository_metadata",
+    srcs = [
+        "@abseil_cpp_internal//:drake_repository_metadata.json",
+        "@bazelisk_internal//:drake_repository_metadata.json",
+        "@ccd_internal//:drake_repository_metadata.json",
+        "@clang_cindex_python3_internal//:drake_repository_metadata.json",
+        "@clarabel_cpp_internal//:drake_repository_metadata.json",
+        "@clp_internal//:drake_repository_metadata.json",
+        "@coinutils_internal//:drake_repository_metadata.json",
+        "@common_robotics_utilities_internal//:drake_repository_metadata.json",
+        "@cpplint_internal//:drake_repository_metadata.json",
+        "@csdp_internal//:drake_repository_metadata.json",
+        "@curl_internal//:drake_repository_metadata.json",
+        "@dm_control_internal//:drake_repository_metadata.json",
+        "@doxygen_internal//:drake_repository_metadata.json",
+        "@drake_models//:drake_repository_metadata.json",
+        "@fcl_internal//:drake_repository_metadata.json",
+        "@github3_py_internal//:drake_repository_metadata.json",
+        "@gklib_internal//:drake_repository_metadata.json",
+        "@gymnasium_py_internal//:drake_repository_metadata.json",
+        "@gz_math_internal//:drake_repository_metadata.json",
+        "@gz_utils_internal//:drake_repository_metadata.json",
+        "@highway_internal//:drake_repository_metadata.json",
+        "@implib_so_internal//:drake_repository_metadata.json",
+        "@ipopt_internal//:drake_repository_metadata.json",
+        "@lapack_internal//:drake_repository_metadata.json",
+        "@lcm_internal//:drake_repository_metadata.json",
+        "@libjpeg_turbo_internal//:drake_repository_metadata.json",
+        "@libpng_internal//:drake_repository_metadata.json",
+        "@libtiff_internal//:drake_repository_metadata.json",
+        "@libzip_internal//:drake_repository_metadata.json",
+        "@meshcat//:drake_repository_metadata.json",
+        "@metis_internal//:drake_repository_metadata.json",
+        "@mosek//:drake_repository_metadata.json",
+        "@mpmath_py_internal//:drake_repository_metadata.json",
+        "@msgpack_internal//:drake_repository_metadata.json",
+        "@mujoco_menagerie_internal//:drake_repository_metadata.json",
+        "@nanoflann_internal//:drake_repository_metadata.json",
+        "@nlohmann_internal//:drake_repository_metadata.json",
+        "@nlopt_internal//:drake_repository_metadata.json",
+        "@onetbb_internal//:drake_repository_metadata.json",
+        "@osqp_internal//:drake_repository_metadata.json",
+        "@picosha2_internal//:drake_repository_metadata.json",
+        "@pybind11//:drake_repository_metadata.json",
+        "@qdldl_internal//:drake_repository_metadata.json",
+        "@qhull_internal//:drake_repository_metadata.json",
+        "@ros_xacro_internal//:drake_repository_metadata.json",
+        "@scs_internal//:drake_repository_metadata.json",
+        "@sdformat_internal//:drake_repository_metadata.json",
+        "@spral_internal//:drake_repository_metadata.json",
+        "@stable_baselines3_internal//:drake_repository_metadata.json",
+        "@stduuid_internal//:drake_repository_metadata.json",
+        "@styleguide_internal//:drake_repository_metadata.json",
+        "@suitesparse_internal//:drake_repository_metadata.json",
+        "@sympy_py_internal//:drake_repository_metadata.json",
+        "@tinygltf_internal//:drake_repository_metadata.json",
+        "@tinyobjloader_internal//:drake_repository_metadata.json",
+        "@tinyxml2_internal//:drake_repository_metadata.json",
+        "@uritemplate_py_internal//:drake_repository_metadata.json",
+        "@usockets_internal//:drake_repository_metadata.json",
+        "@uwebsockets_internal//:drake_repository_metadata.json",
+        "@voxelized_geometry_tools_internal//:drake_repository_metadata.json",
+        "@vtk_internal//:drake_repository_metadata.json",
+        "@xmlrunner_py_internal//:drake_repository_metadata.json",
+        "@yaml_cpp_internal//:drake_repository_metadata.json",
+    ],
+)
+
+enumerate_filegroup(
+    name = "drake_repository_metadata_inventory.txt",
+    data = [":drake_repository_metadata"],
+)
+
+drake_py_library(
+    name = "module_py",
+    srcs = ["__init__.py"],
+    visibility = [":__subpackages__"],
+    deps = [
+        "//tools:module_py",
+    ],
+)
+
+drake_py_library(
+    name = "metadata",
+    srcs = ["metadata.py"],
+    data = [
+        ":drake_repository_metadata",
+        ":drake_repository_metadata_inventory.txt",
+    ],
+    deps = [
+        "//tools:module_py",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_binary(
+    name = "mirror_to_s3",
+    srcs = ["mirror_to_s3.py"],
+    deps = [
+        ":metadata",
+    ],
+)
+
+drake_py_binary(
+    name = "new_release",
+    srcs = ["new_release.py"],
+    deps = [
+        ":metadata",
+        "@github3_py_internal//:github3_py",
+    ],
+)
+
+drake_py_binary(
+    name = "vendor_cxx",
+    srcs = ["vendor_cxx.py"],
+    visibility = [
+        # These should all be of the form "@foo_internal//:__subpackages__".
+        "@clarabel_cpp_internal//:__subpackages__",
+        "@clp_internal//:__subpackages__",
+        "@coinutils_internal//:__subpackages__",
+        "@fcl_internal//:__subpackages__",
+        "@gz_math_internal//:__subpackages__",
+        "@gz_utils_internal//:__subpackages__",
+        "@ipopt_internal//:__subpackages__",
+        "@msgpack_internal//:__subpackages__",
+        "@nlopt_internal//:__subpackages__",
+        "@qhull_internal//:__subpackages__",
+        "@sdformat_internal//:__subpackages__",
+        "@tinygltf_internal//:__subpackages__",
+        "@tinyobjloader_internal//:__subpackages__",
+        "@yaml_cpp_internal//:__subpackages__",
+    ],
+    deps = [":module_py"],
+)
+
+drake_py_test(
+    name = "vendor_cxx_test",
+    srcs = [
+        "vendor_cxx.py",
+        "vendor_cxx_test.py",
+    ],
+    allow_import_unittest = True,
+    deps = [":module_py"],
+)
+
+drake_py_test(
+    name = "bzlmod_sync_test",
+    srcs = ["bzlmod_sync_test.py"],
+    allow_import_unittest = True,
+    data = [
+        "//:MODULE.bazel",
+        "//:cmake/MODULE.bazel.in",
+    ],
+    tags = ["lint"],
+    deps = [
+        ":module_py",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_binary(
+    name = "cmake_configure_file",
+    srcs = ["cmake_configure_file.py"],
+    visibility = ["//visibility:public"],
+)
+
+_DRAKE_EXTERNAL_PACKAGE_INSTALLS = ["@%s//:install" % p for p in [
+    "ccd_internal",
+    "clp_internal",
+    "coinutils_internal",
+    "common_robotics_utilities_internal",
+    "curl_internal",
+    "fcl_internal",
+    "gklib_internal",
+    "gz_math_internal",
+    "gz_utils_internal",
+    "ipopt_internal",
+    "libpng_internal",
+    "libtiff_internal",
+    "libzip_internal",
+    "meshcat",
+    "metis_internal",
+    "msgpack_internal",
+    "nanoflann_internal",
+    "nlohmann_internal",
+    "nlopt_internal",
+    "picosha2_internal",
+    "poisson_disk_sampling_internal",
+    # N.B. The @pybind11//:install is handled by //bindings/pydrake:install.
+    "qhull_internal",
+    "sdformat_internal",
+    "spral_internal",
+    "stduuid_internal",
+    "suitesparse_internal",
+    "tinygltf_internal",
+    "tinyobjloader_internal",
+    "tinyxml2_internal",
+    "usockets_internal",
+    "uwebsockets_internal",
+    "vtk_internal",
+    "yaml_cpp_internal",
+]] + ["//tools/workspace/%s:install" % p for p in [
+    "abseil_cpp_internal",
+    "blas",
+    "eigen",
+    "fmt",
+    "glib",
+    "highway_internal",
+    "lapack",
+    "libjpeg_turbo_internal",
+    "opencl",
+    "spdlog",
+    "zlib",
+]] + select({
+    "//tools/workspace/csdp_internal:enabled": ["@csdp_internal//:install"],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/clarabel_cpp_internal:enabled": [
+        "//tools/workspace/crate_universe:install",
+        "@clarabel_cpp_internal//:install",
+    ],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/gurobi:enabled": ["@gurobi//:install"],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/mosek:enabled": ["@mosek//:install"],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/snopt:enabled": ["//tools/workspace/snopt:install"],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/osqp_internal:enabled": [
+        "@osqp_internal//:install",
+        "@qdldl_internal//:install",
+    ],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/scs_internal:enabled": ["@scs_internal//:install"],
+    "//conditions:default": [],
+}) + select({
+    "//tools/workspace/lcm_internal:flag_with_lcm_runtime_true": [
+        "//tools/workspace/lcm_internal:install",
+    ],
+    "//conditions:default": [],
+})
+
+install(
+    name = "install_external_packages",
+    visibility = ["//:__pkg__"],
+    deps = _DRAKE_EXTERNAL_PACKAGE_INSTALLS,
+)
+
+check_licenses(_DRAKE_EXTERNAL_PACKAGE_INSTALLS)
+
+add_lint_tests()

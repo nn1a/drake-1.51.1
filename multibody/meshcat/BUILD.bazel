@@ -1,0 +1,138 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "models",
+    srcs = glob([
+        "**/*.sdf",
+    ]),
+)
+
+drake_cc_package_library(
+    name = "meshcat",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":contact_visualizer",
+        ":contact_visualizer_params",
+        ":hydroelastic_contact_visualizer",
+        ":joint_sliders",
+        ":point_contact_visualizer",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_visualizer",
+    srcs = ["contact_visualizer.cc"],
+    hdrs = ["contact_visualizer.h"],
+    deps = [
+        ":contact_visualizer_params",
+        ":hydroelastic_contact_visualizer",
+        ":point_contact_visualizer",
+        "//common:essential",
+        "//geometry:meshcat",
+        "//geometry:meshcat_graphviz",
+        "//math:geometric_transform",
+        "//multibody/plant",
+        "//systems/framework:context",
+        "//systems/framework:diagram_builder",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_visualizer_test",
+    timeout = "moderate",
+    data = [
+        ":models",
+        "@drake_models//:manipulation_station",
+    ],
+    deps = [
+        ":contact_visualizer",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/parsing",
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hydroelastic_contact_visualizer_test",
+    deps = [
+        ":hydroelastic_contact_visualizer",
+        "//common/test_utilities:expect_no_throw",
+        "@msgpack_internal//:msgpack",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_visualizer_params",
+    hdrs = ["contact_visualizer_params.h"],
+    deps = [
+        "//common:name_value",
+        "//geometry:rgba",
+    ],
+)
+
+drake_cc_library(
+    name = "joint_sliders",
+    srcs = ["joint_sliders.cc"],
+    hdrs = ["joint_sliders.h"],
+    deps = [
+        "//common:overloaded",
+        "//common:scope_exit",
+        "//geometry:meshcat",
+        "//geometry:meshcat_graphviz",
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_googletest(
+    name = "joint_sliders_test",
+    data = [
+        ":test/universal_joint.sdf",
+        "//multibody:models",
+        "//multibody/benchmarks/acrobot:models",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":joint_sliders",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry:meshcat_visualizer",
+        "//geometry/test_utilities:meshcat_environment",
+        "//multibody/parsing",
+        "//systems/framework/test_utilities",
+    ],
+)
+
+drake_cc_library(
+    name = "point_contact_visualizer",
+    srcs = ["point_contact_visualizer.cc"],
+    hdrs = ["point_contact_visualizer.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":contact_visualizer_params",
+        "//geometry:meshcat",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "hydroelastic_contact_visualizer",
+    srcs = ["hydroelastic_contact_visualizer.cc"],
+    hdrs = ["hydroelastic_contact_visualizer.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":contact_visualizer_params",
+        "//geometry:meshcat",
+        "//math:geometric_transform",
+    ],
+)
+
+add_lint_tests()

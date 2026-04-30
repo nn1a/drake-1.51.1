@@ -1,0 +1,221 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
+load(
+    "@bazel_skylib//rules:common_settings.bzl",
+    "bool_flag",
+    "int_flag",
+    "string_flag",
+)
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:sh.bzl", "sh_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# This cc_toolchain package provides labels that can be used by `select()`
+# statements in our build rules to tweak settings based on which C++ compiler
+# is being used. For example uses, see drake/tools/skylark/drake_cc.bzl.
+
+# When this is set to "error", a Drake build will promote some warnings of our
+# choice to errors. See drake/tools/cc_toolchain/bazel.rc for details. This is
+# intended for internal use only, not for users to configure.
+string_flag(
+    name = "error_severity",
+    build_setting_default = "warning",
+    values = [
+        "warning",
+        "error",
+    ],
+)
+
+# In our developer builds and CMake installs, we use the following flag as
+# an optional hint for configuring compiler warnings. It's not strictly
+# necessary to set, but doing so will tweak the compiler flags and reduce
+# warning spam during the build.
+#
+# This is intended for internal use only, not for users to configure.
+#
+# TODO(jwnimmer-tri) Ideally, rules_cc would provide some toolchain attribute
+# that we could query for the version of the compiler, but that doesn't seem to
+# exist yet.
+int_flag(
+    name = "compiler_major",
+    build_setting_default = 0,
+)
+
+config_setting(
+    name = "apple",
+    constraint_values = ["@platforms//os:osx"],
+)
+
+config_setting(
+    name = "linux",
+    constraint_values = ["@platforms//os:linux"],
+)
+
+config_setting(
+    name = "error_severity_warning",
+    flag_values = {":error_severity": "warning"},
+)
+
+config_setting(
+    name = "error_severity_error",
+    flag_values = {":error_severity": "error"},
+)
+
+selects.config_setting_group(
+    name = "apple_clang_with_warnings",
+    match_all = [
+        ":apple",
+        "@rules_cc//cc/compiler:clang",
+        ":error_severity_warning",
+    ],
+)
+
+selects.config_setting_group(
+    name = "apple_clang_with_errors",
+    match_all = [
+        ":apple",
+        "@rules_cc//cc/compiler:clang",
+        ":error_severity_error",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gcc_with_warnings",
+    match_all = [
+        "@rules_cc//cc/compiler:gcc",
+        ":error_severity_warning",
+    ],
+)
+
+selects.config_setting_group(
+    name = "gcc_with_errors",
+    match_all = [
+        "@rules_cc//cc/compiler:gcc",
+        ":error_severity_error",
+    ],
+)
+
+selects.config_setting_group(
+    name = "linux_clang_with_warnings",
+    match_all = [
+        ":linux",
+        "@rules_cc//cc/compiler:clang",
+        ":error_severity_warning",
+    ],
+)
+
+selects.config_setting_group(
+    name = "linux_clang_with_errors",
+    match_all = [
+        ":linux",
+        "@rules_cc//cc/compiler:clang",
+        ":error_severity_error",
+    ],
+)
+
+config_setting(
+    name = "debug",
+    values = {"compilation_mode": "dbg"},
+)
+
+# (Internal use only.)  When this is set to True, some Drake builds may use the
+# mold linker, primarily for its improved handling of DWARF debug
+# information. It should be False (the default) for all builds initiated via
+# Drake's CMake wrappers. See the other "mold_linker" settings below and issue
+# #21836.
+bool_flag(
+    name = "allow_mold_linker",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "mold_linker_allowed",
+    flag_values = {":allow_mold_linker": "True"},
+)
+
+selects.config_setting_group(
+    name = "use_mold_linker",
+    match_all = [
+        # TODO(rpoyner-tri): consider removing the "noble" requirement when
+        # Drake's support of "jammy" ends. Jammy is excluded because its
+        # version of the mold linker is too old.
+        "//tools:ubuntu_noble",
+        ":debug",
+        ":mold_linker_allowed",
+    ],
+)
+
+COMPILER_MAJOR_VERSIONS = [
+    "13",
+    "14",
+    "15",
+]
+
+[
+    config_setting(
+        name = "compiler_major_{}".format(x),
+        flag_values = {":compiler_major": x},
+    )
+    for x in COMPILER_MAJOR_VERSIONS
+]
+
+[
+    selects.config_setting_group(
+        name = "gcc_{}_with_warnings".format(x),
+        match_all = [
+            "@rules_cc//cc/compiler:gcc",
+            ":compiler_major_{}".format(x),
+            ":error_severity_warning",
+        ],
+    )
+    for x in COMPILER_MAJOR_VERSIONS
+]
+
+[
+    selects.config_setting_group(
+        name = "gcc_{}_with_errors".format(x),
+        match_all = [
+            "@rules_cc//cc/compiler:gcc",
+            ":compiler_major_{}".format(x),
+            ":error_severity_error",
+        ],
+    )
+    for x in COMPILER_MAJOR_VERSIONS
+]
+
+# *****************************************************************************
+# The following sh_binary (and its prerequisite genrule) are used by drake-ci's
+# CMake setup logic to sniff out Drake's selected compiler. They are not used
+# by Drake's normal Bazel nor CMake builds.
+
+# Capture bazel's action environment variables into a bash environment file.
+# These values reflect ONLY the command-line (or rcfile) `--action_env`
+# settings that Bazel uses when running its toolchain configuration, e.g.
+# `CC=clang`. This is not necessarily the same as what compiler (or compiler
+# wrapper) is actually invoked during a build. Beware that environment
+# variables passed like `CC=... bazel ...` are NOT captured by this!
+genrule(
+    name = "capture_compiler_config",
+    outs = ["capture_compiler_config.env"],
+    cmd = "cat <<EOF > '$@'\n" +
+          "PATH=\"$$PATH\"\n" +
+          "CC=\"$${CC:-}\"\n" +
+          "CXX=\"$${CXX:-}\"\n" +
+          "EOF",
+    visibility = ["//visibility:private"],
+)
+
+# Utility script to indicate which compiler is selected by use of
+# `--config={gcc,clang}`. This is intended to be used by the CI infrastructure,
+# which needs a way to get this specific information. Unless you are very sure
+# you understand the first sentence of this comment, as well as the caveats
+# noted in the comment on the above `genrule`, DON'T USE THIS.
+sh_binary(
+    name = "print_compiler_config",
+    srcs = ["print_compiler_config.sh"],
+    args = ["$(location :capture_compiler_config.env)"],
+    data = [":capture_compiler_config.env"],
+    visibility = ["//visibility:private"],
+)
+
+add_lint_tests()

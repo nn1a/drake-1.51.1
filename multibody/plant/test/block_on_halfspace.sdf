@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <!-- Note: This is the accompaning SDF file for the unit test
+       hydrostatic_traction_test.cc and therefore these two files must be kept
+       in sync.
+
+       This file defines the model for a box on a flat plane.
+  -->
+  <model name="block_on_halfspace">
+    <!-- A link to model the ground. Inertia values are not particularly
+         important since the ground does not move. -->
+    <link name="ground">
+      <pose>0 0 -1 0 0 0</pose>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>1.0</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.0</iyy>
+          <iyz>0</iyz>
+          <izz>1.0</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <geometry>
+          <plane>
+            <normal>0.0 0.0 1.0</normal>
+          </plane>
+        </geometry>
+      </visual>
+      <collision name="ground-collision">
+        <geometry>
+          <box>
+            <size>10.0 10.0 0.1</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+    <!-- The model for a solid, unit cube of uniform density. -->
+    <link name="box">
+      <pose>0 0 0.5 0 0 0</pose>
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.166666666666667</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.166666666666667</iyy>
+          <iyz>0</iyz>
+          <izz>0.166666666666667</izz>
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <geometry>
+          <box>
+            <size>1.0 1.0 1.0</size>
+          </box>
+        </geometry>
+      </visual>
+      <collision name="box-collision">
+        <geometry>
+          <box>
+            <size>1.0 1.0 1.0</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

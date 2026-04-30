@@ -1,0 +1,210 @@
+load(
+    "@lcm_internal//lcm-bazel:lcm_cc_library_srcs.bzl",
+    "lcm_cc_library_srcs",
+)
+load(
+    "@lcm_internal//lcm-bazel:lcm_java_library_srcs.bzl",
+    "lcm_java_library_srcs",
+)
+load(
+    "@lcm_internal//lcm-bazel:lcm_library.bzl",
+    "lcm_library",
+)
+load(
+    "@lcm_internal//lcm-bazel:lcm_py_library_srcs.bzl",
+    "lcm_py_library_srcs",
+)
+load("//tools/install:install.bzl", "install")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:cc.bzl",
+    "cc_library",
+)
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_installed_headers",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_test",
+)
+load(
+    "//tools/skylark:java.bzl",
+    "java_binary",
+    "java_library",
+)
+load(
+    "//tools/skylark:py.bzl",
+    "py_library",
+)
+load("//tools/workspace:generate_file.bzl", "generate_file")
+load(":defs.bzl", "ALL_LCM_SRCS")
+
+package(default_visibility = ["//visibility:private"])
+
+# === Message sources (*.lcm files) ===
+
+# Search for all *.lcm files.
+_GLOB_ALL_LCM_SRCS = sorted(glob(["*.lcm"]))
+
+# The list of files in the glob, but not in defs.bzl.
+_MISSING_ALL = [
+    x
+    for x in _GLOB_ALL_LCM_SRCS
+    if x not in ALL_LCM_SRCS
+]
+
+# Fail with an error message if the two lists disagree.
+# TODO(jwnimmer-tri) Ideally, we'd fail at test-time, not build-time.
+(len(_MISSING_ALL) == 0) or fail(
+    "Please update lcmtypes/defs.bzl to add {}".format(
+        _MISSING_ALL,
+    ),
+)
+
+# The list of files in defs.bzl, but not in the glob.
+_EXTRA_ALL = [
+    x
+    for x in ALL_LCM_SRCS
+    if x not in _GLOB_ALL_LCM_SRCS
+]
+
+# Fail with an error message if the two lists disagree.
+# TODO(jwnimmer-tri) Ideally, we'd fail at test-time, not build-time.
+(len(_EXTRA_ALL) == 0) or fail(
+    "Please update lcmtypes/defs.bzl remove {}".format(
+        _EXTRA_ALL,
+    ),
+)
+
+lcm_library(
+    name = "messages",
+    srcs = ALL_LCM_SRCS,
+    lcm_package = "drake",
+    visibility = ["//visibility:public"],
+)
+
+# === C++ ===
+
+lcm_cc_library_srcs(
+    name = "messages_cc_srcs",
+    src = ":messages",
+    # For C++ (only), we use an improved, Drake-specific lcm-gen.
+    lcmgen = "//tools/lcm_gen",
+)
+
+cc_library(
+    name = "lcmtypes_drake_cc",
+    srcs = [":messages_cc_srcs"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+drake_installed_headers(
+    name = "lcmtypes_drake_cc.installed_headers",
+    hdrs = [
+        "drake/{}.h".format(lcm_src[:-len(".lcm")])
+        for lcm_src in ALL_LCM_SRCS
+    ],
+    tags = ["nolint"],
+    visibility = ["//visibility:public"],
+    deps = [],
+)
+
+install(
+    name = "install_lcmtypes_cc",
+    hdrs = [":messages_cc_srcs"],
+    hdr_dest = "include",
+)
+
+# === Python ===
+
+lcm_py_library_srcs(
+    name = "messages_py_srcs",
+    src = ":messages",
+)
+
+py_library(
+    name = "lcmtypes_drake_py",
+    srcs = [":messages_py_srcs"],
+    imports = ["."],
+    visibility = ["//visibility:public"],
+)
+
+install(
+    name = "install_lcmtypes_python",
+    targets = [":lcmtypes_drake_py"],
+)
+
+config_setting(
+    name = "flag_install_python_true",
+    flag_values = {
+        "//tools/flags:install_python": "True",
+    },
+)
+
+# === Java ===
+
+lcm_java_library_srcs(
+    name = "messages_java_srcs",
+    src = ":messages",
+)
+
+java_library(
+    name = "lcmtypes_drake_java",
+    srcs = [":messages_java_srcs"],
+    visibility = ["//visibility:public"],
+    deps = ["@lcm_internal//lcm-java"],
+)
+
+install(
+    name = "install_lcmtypes_java",
+    targets = [":lcmtypes_drake_java"],
+    rename = {"share/java/liblcmtypes_drake_java.jar": "lcmtypes_drake.jar"},
+)
+
+config_setting(
+    name = "flag_install_java_true",
+    flag_values = {"//tools/flags:install_java": "True"},
+)
+
+java_binary(
+    name = "drake-lcm-spy",
+    main_class = "lcm.spy.Spy",
+    runtime_deps = [
+        ":lcmtypes_drake_java",
+    ],
+)
+
+# === Install logic (with opt-outs) ===
+
+install(
+    name = "install",
+    visibility = ["//:__pkg__"],
+    deps = [
+        ":install_lcmtypes_cc",
+    ] + select({
+        ":flag_install_python_true": [
+            ":install_lcmtypes_python",
+        ],
+        "//conditions:default": [],
+    }) + select({
+        ":flag_install_java_true": [
+            ":install_lcmtypes_java",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# === Tests ===
+
+drake_py_test(
+    name = "nested_types_test",
+    deps = [
+        ":lcmtypes_drake_py",
+    ],
+)
+
+add_lint_tests()

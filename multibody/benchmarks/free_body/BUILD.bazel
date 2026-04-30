@@ -1,0 +1,57 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+filegroup(
+    name = "models",
+    testonly = 1,
+    srcs = [
+        "uniform_solid_cylinder.urdf",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+drake_cc_package_library(
+    name = "free_body",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":free_body_only",
+    ],
+)
+
+drake_cc_library(
+    name = "free_body_only",
+    srcs = [
+        "free_body.cc",
+    ],
+    hdrs = [
+        "free_body.h",
+    ],
+    deps = [
+        "//common",
+        "//math:geometric_transform",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "multibody_plant_free_body_test",
+    timeout = "moderate",
+    data = [":models"],
+    deps = [
+        ":free_body",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//multibody/test_utilities:floating_body_plant",
+        "//systems/analysis:runge_kutta3_integrator",
+        "//systems/analysis:simulator",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,842 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//tools/install:install.bzl", "install_files")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+load(
+    "//tools/workspace/dm_control_internal:files.bzl",
+    "dm_control_mujoco_files",
+)
+
+filegroup(
+    name = "doxygen_input",
+    srcs = ["parsing_doxygen.h"],
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+filegroup(
+    name = "test_models",
+    testonly = 1,
+    srcs = glob([
+        "test/**/*.config",
+        "test/**/*.dmd.yaml",
+        "test/**/*.obj",
+        "test/**/*.png",
+        "test/**/*.sdf",
+        "test/**/*.urdf",
+        "test/**/*.vtk",
+        "test/**/*.xml",
+        "test/**/*.zip",
+        "test/**/COLCON_IGNORE",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+[
+    copy_file(
+        name = "_copy_{}".format(x),
+        testonly = True,
+        src = "@dm_control_internal//:{}".format(x),
+        out = x,
+        allow_symlink = True,
+    )
+    for x in dm_control_mujoco_files()
+]
+
+filegroup(
+    name = "dm_control_mujoco_files",
+    testonly = True,
+    srcs = [
+        ":{}".format(x)
+        for x in dm_control_mujoco_files()
+    ],
+)
+
+drake_cc_package_library(
+    name = "parsing",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":collision_filter_groups",
+        ":model_directives",
+        ":model_instance_info",
+        ":package_map",
+        ":parser",
+        ":process_model_directives",
+        ":scoped_names",
+    ],
+)
+
+genrule(
+    name = "drake_models_json",
+    srcs = ["@drake_models//:drake_repository_metadata.json"],
+    outs = ["drake_models.json"],
+    cmd = "cp $< $@",
+    visibility = ["//visibility:public"],
+)
+
+drake_cc_library(
+    name = "package_map",
+    srcs = [
+        "detail_path_utils.cc",
+        "package_map.cc",
+    ],
+    hdrs = [
+        "detail_path_utils.h",
+        "package_map.h",
+    ],
+    data = [
+        ":drake_models.json",
+        ":package_downloader.py",
+        "//:package.xml",
+        "@drake_models//:package.xml",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common:essential",
+        "//common:name_value",
+    ],
+    implementation_deps = [
+        "//common:diagnostic_policy",
+        "//common:find_cache",
+        "//common:find_resource",
+        "//common:find_runfiles",
+        "//common:network_policy",
+        "//common:scope_exit",
+        "//common:sha256",
+        "//common/yaml",
+        "@tinyxml2_internal//:tinyxml2",
+    ],
+)
+
+drake_cc_library(
+    name = "collision_filter_groups",
+    srcs = ["collision_filter_groups.cc"],
+    hdrs = ["collision_filter_groups.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common:copyable_unique_ptr",
+        "//common:essential",
+        "//common:sorted_pair",
+    ],
+    implementation_deps = [
+        ":detail_collision_filter_groups_impl",
+    ],
+)
+
+# For simplicity in dependency management (e.g., prevent exposing `sdformat`),
+# we make all `detail_*` libraries private. For more info, see #7451.
+drake_cc_library(
+    name = "detail_misc",
+    srcs = [
+        "detail_collision_filter_group_resolver.cc",
+        "detail_common.cc",
+        "detail_ignition.cc",
+        "detail_tinyxml.cc",
+        "detail_tinyxml2_diagnostic.cc",
+    ],
+    hdrs = [
+        "detail_collision_filter_group_resolver.h",
+        "detail_common.h",
+        "detail_ignition.h",
+        "detail_strongly_connected_components.h",
+        "detail_tinyxml.h",
+        "detail_tinyxml2_diagnostic.h",
+    ],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":collision_filter_groups",
+        ":detail_collision_filter_groups_impl",
+        ":package_map",
+        "//common:diagnostic_policy",
+        "//common:essential",
+        "//geometry:proximity_properties",
+        "//math:geometric_transform",
+        "//multibody/plant",
+        "//multibody/tree:scoped_name",
+        "@sdformat_internal//:sdformat",
+        "@tinyxml2_internal//:tinyxml2",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_collision_filter_groups_impl",
+    srcs = [
+        "detail_collision_filter_groups_impl.cc",
+        "detail_instanced_name.cc",
+    ],
+    hdrs = [
+        "detail_collision_filter_groups_impl.h",
+        "detail_instanced_name.h",
+    ],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        "//common:essential",
+        "//common:sorted_pair",
+        "//multibody/tree:multibody_tree_indexes",
+        "//multibody/tree:scoped_name",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_mesh_parser",
+    srcs = ["detail_mesh_parser.cc"],
+    hdrs = ["detail_mesh_parser.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_make_model_name",
+        ":detail_parsing_workspace",
+        "//geometry:mesh_source",
+        "//geometry/proximity:obj_to_surface_mesh",
+        "//multibody/plant",
+        "//multibody/tree:geometry_spatial_inertia",
+        "@fmt",
+        "@tinyobjloader_internal//:tinyobjloader",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_sdf_diagnostic",
+    srcs = ["detail_sdf_diagnostic.cc"],
+    hdrs = ["detail_sdf_diagnostic.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_misc",
+        "//common:diagnostic_policy",
+        "@sdformat_internal//:sdformat",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_sdf_diagnostic_test",
+    deps = [
+        ":detail_sdf_diagnostic",
+        "//common/test_utilities:diagnostic_policy_test_base",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_sdf_geometry",
+    srcs = ["detail_sdf_geometry.cc"],
+    hdrs = ["detail_sdf_geometry.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_misc",
+        ":detail_sdf_diagnostic",
+        ":package_map",
+        "//common:diagnostic_policy",
+        "//geometry:geometry_instance",
+        "//geometry:geometry_roles",
+        "//geometry:shape_specification",
+        "//multibody/plant:coulomb_friction",
+        "@sdformat_internal//:sdformat",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_sdf_parser",
+    srcs = ["detail_sdf_parser.cc"],
+    hdrs = ["detail_sdf_parser.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_misc",
+        ":detail_parsing_workspace",
+        ":detail_sdf_diagnostic",
+        ":detail_sdf_geometry",
+        ":detail_urdf_parser",
+        "//multibody/plant",
+        "@sdformat_internal//:sdformat",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_urdf_parser",
+    srcs = [
+        "detail_urdf_geometry.cc",
+        "detail_urdf_parser.cc",
+    ],
+    hdrs = [
+        "detail_urdf_geometry.h",
+        "detail_urdf_parser.h",
+    ],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_make_model_name",
+        ":detail_misc",
+        ":detail_parsing_workspace",
+        ":scoped_names",
+        "@fmt",
+        "@tinyxml2_internal//:tinyxml2",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_mujoco_parser",
+    srcs = ["detail_mujoco_parser.cc"],
+    hdrs = ["detail_mujoco_parser.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_make_model_name",
+        ":detail_misc",
+        ":detail_parsing_workspace",
+        "//lcm",
+        "//multibody/plant",
+        "//systems/sensors:camera_config_functions",
+        "@fmt",
+        "@tinyxml2_internal//:tinyxml2",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_dmd_parser",
+    srcs = ["detail_dmd_parser.cc"],
+    hdrs = ["detail_dmd_parser.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_make_model_name",
+        ":detail_misc",
+        ":detail_parsing_workspace",
+        ":model_directives",
+        ":model_instance_info",
+        ":scoped_names",
+        "//common/yaml",
+        "//multibody/plant",
+        "//multibody/tree",
+        "@fmt",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_make_model_name",
+    srcs = ["detail_make_model_name.cc"],
+    hdrs = ["detail_make_model_name.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_parsing_workspace",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_parsing_workspace",
+    srcs = ["detail_parsing_workspace.cc"],
+    hdrs = ["detail_parsing_workspace.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_misc",
+        ":package_map",
+        "//common:diagnostic_policy",
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_library(
+    name = "detail_select_parser",
+    srcs = ["detail_select_parser.cc"],
+    hdrs = ["detail_select_parser.h"],
+    internal = True,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_dmd_parser",
+        ":detail_mesh_parser",
+        ":detail_mujoco_parser",
+        ":detail_parsing_workspace",
+        ":detail_sdf_parser",
+        ":detail_urdf_parser",
+    ],
+)
+
+# The composite parse module and parser depend on one another, but the
+# detail_composite_parse header should remain private.
+drake_cc_library(
+    name = "parser",
+    srcs = [
+        "detail_composite_parse.cc",
+        "parser.cc",
+    ],
+    hdrs = [
+        "detail_composite_parse.h",
+        "parser.h",
+    ],
+    install_hdrs_exclude = [
+        "detail_composite_parse.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":collision_filter_groups",
+        ":package_map",
+        "//common:diagnostic_policy",
+        "//multibody/plant",
+    ],
+    implementation_deps = [
+        ":detail_parsing_workspace",
+        ":detail_select_parser",
+    ],
+)
+
+drake_cc_library(
+    name = "model_directives",
+    srcs = ["model_directives.cc"],
+    hdrs = ["model_directives.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common:essential",
+        "//common:name_value",
+        "//common/schema:transform",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "model_instance_info",
+    hdrs = ["model_instance_info.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//math:geometric_transform",
+        "//multibody/tree:multibody_tree_indexes",
+    ],
+)
+
+drake_cc_library(
+    name = "process_model_directives",
+    srcs = ["process_model_directives.cc"],
+    hdrs = ["process_model_directives.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":model_directives",
+        ":model_instance_info",
+        ":parser",
+        "//multibody/plant",
+    ],
+    implementation_deps = [
+        ":detail_dmd_parser",
+        ":detail_misc",
+        ":detail_parsing_workspace",
+        ":scoped_names",
+        "//common:diagnostic_policy",
+        "//common:find_resource",
+    ],
+)
+
+drake_cc_library(
+    name = "scoped_names",
+    srcs = ["scoped_names.cc"],
+    hdrs = ["scoped_names.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_library(
+    name = "test_loaders",
+    testonly = 1,
+    srcs = ["test/test_loaders.cc"],
+    hdrs = ["test/test_loaders.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":detail_misc",
+        ":parser",
+        "//common:find_resource",
+    ],
+)
+
+drake_cc_googletest(
+    name = "acrobot_parser_test",
+    data = [
+        ":test_models",
+        "//multibody/benchmarks/acrobot:models",
+    ],
+    deps = [
+        ":test_loaders",
+        "//common/test_utilities",
+        "//multibody/benchmarks/acrobot",
+        "//multibody/benchmarks/acrobot:make_acrobot_plant",
+    ],
+)
+
+drake_cc_googletest(
+    name = "common_parser_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":test_loaders",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_binary(
+    name = "parser_manual_test",
+    testonly = 1,
+    srcs = ["test/parser_manual_test.cc"],
+    add_test_rule = 1,
+    data = [":test_models"],
+    test_rule_args = [
+        "multibody/parsing/test/urdf_parser_test/joint_parsing_test.urdf",
+    ],
+    deps = [
+        ":parser",
+        "//common:add_text_logging_gflags",
+        "@gflags",
+    ],
+)
+
+drake_cc_googletest(
+    name = "parser_test",
+    data = [
+        ":dm_control_mujoco_files",
+        ":test_models",
+        "//multibody/benchmarks/acrobot:models",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+        "//planning:robot_diagram_builder",
+    ],
+)
+
+filegroup(
+    name = "process_model_directives_test_models",
+    testonly = True,
+    data = glob(["test/process_model_directives_test/**"]) + [":test_models"],
+    visibility = ["//bindings/pydrake/multibody:__pkg__"],
+)
+
+drake_cc_googletest(
+    name = "process_model_directives_test",
+    data = [
+        ":process_model_directives_test_models",
+        "//manipulation/util:panda_arm_and_hand_test_model",
+        "//multibody/benchmarks/acrobot:models",
+    ],
+    deps = [
+        ":process_model_directives",
+        "//common/test_utilities",
+        "//common/yaml",
+    ],
+)
+
+drake_cc_googletest(
+    name = "scoped_names_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":parser",
+        ":scoped_names",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "model_directives_test",
+    deps = [
+        ":model_directives",
+        "//common/yaml",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_common_test",
+    deps = [
+        ":detail_misc",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_dmd_parser_test",
+    data = [
+        ":process_model_directives_test_models",
+        ":test_models",
+    ],
+    deps = [
+        ":detail_dmd_parser",
+        ":detail_sdf_parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_mesh_parser_test",
+    data = [
+        ":test_models",
+        "//geometry:test_obj_files",
+        "//geometry/render:test_models",
+    ],
+    deps = [
+        ":detail_mesh_parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_select_parser_test",
+    deps = [
+        ":detail_select_parser",
+        "//common/test_utilities:diagnostic_policy_test_base",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_make_model_name_test",
+    deps = [
+        ":detail_make_model_name",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_sdf_parser_test",
+    data = [
+        ":test_models",
+        "//geometry:test_obj_files",
+        "//multibody/benchmarks/acrobot:models",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":detail_mujoco_parser",
+        ":detail_sdf_parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_urdf_parser_test",
+    data = [
+        ":test_models",
+        "//multibody/benchmarks/acrobot:models",
+        "@drake_models//:atlas",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":detail_urdf_parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+        "//multibody/benchmarks/acrobot",
+        "//multibody/benchmarks/acrobot:make_acrobot_plant",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_mujoco_parser_test",
+    data = [
+        ":dm_control_mujoco_files",
+        ":test_models",
+        "//geometry:test_obj_files",
+        "//geometry:test_stl_files",
+        "@mujoco_menagerie_internal//:hello_robot_stretch",
+    ],
+    deps = [
+        ":detail_mujoco_parser",
+        "//common:find_resource",
+        "//common:find_runfiles",
+        "//common/test_utilities:diagnostic_policy_test_base",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//common/test_utilities:maybe_pause_for_user",
+        "//geometry/test_utilities:meshcat_environment",
+        "//systems/sensors:rgbd_sensor",
+        "//visualization",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_mujoco_parser_examples_test",
+    data = [
+        ":dm_control_mujoco_files",
+        "@mujoco_menagerie_internal//:menagerie",
+    ],
+    shard_count = 4,
+    deps = [
+        ":detail_mujoco_parser",
+        "//common:find_resource",
+        "//common:find_runfiles",
+        "//common/test_utilities:diagnostic_policy_test_base",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_sdf_geometry_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":detail_sdf_geometry",
+        "//common/test_utilities:diagnostic_policy_test_base",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_urdf_geometry_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":detail_urdf_parser",
+        "//common:find_resource",
+        "//common/test_utilities",
+    ],
+)
+
+drake_py_library(
+    name = "package_downloader_lib",
+    testonly = True,
+    srcs = ["package_downloader.py"],
+)
+
+drake_py_unittest(
+    name = "package_downloader_test",
+    deps = [
+        ":package_downloader_lib",
+    ],
+)
+
+drake_py_unittest(
+    name = "package_downloader_stress_test",
+    data = ["package_downloader.py"],
+    tags = ["cpu:8"],
+)
+
+drake_cc_googletest(
+    name = "package_map_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":package_map",
+        "//common:find_resource",
+        "//common:scope_exit",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "package_map_remote_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":package_map",
+        "//common:find_cache",
+        "//common:find_resource",
+        "//common:scope_exit",
+        "//common:sha256",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "drake_manifest_resolution_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        "//common:find_resource",
+        "//multibody/parsing",
+        "//systems/framework:diagram_builder",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_filter_groups_test",
+    deps = [
+        ":collision_filter_groups",
+        ":detail_collision_filter_groups_impl",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_instanced_name_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":detail_collision_filter_groups_impl",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_path_utils_test",
+    data = [
+        ":test_models",
+    ],
+    deps = [
+        ":detail_misc",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_strongly_connected_components_test",
+    deps = [
+        ":detail_misc",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_tinyxml_test",
+    deps = [
+        ":detail_misc",
+        "//common/test_utilities:diagnostic_policy_test_base",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_tinyxml2_diagnostic_test",
+    deps = [
+        ":detail_misc",
+        "//common/test_utilities:diagnostic_policy_test_base",
+    ],
+)
+
+drake_cc_googletest(
+    name = "detail_collision_filter_group_resolver_test",
+    deps = [
+        ":detail_misc",
+        "//common/test_utilities:diagnostic_policy_test_base",
+    ],
+)
+
+install_files(
+    name = "install",
+    dest = "share/drake/multibody/parsing",
+    files = [
+        "drake_models.json",
+        "package_downloader.py",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+add_lint_tests()

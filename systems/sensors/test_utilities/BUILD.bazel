@@ -1,0 +1,32 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "test_utilities",
+    testonly = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":image_compare",
+    ],
+)
+
+drake_cc_library(
+    name = "image_compare",
+    testonly = 1,
+    srcs = ["image_compare.cc"],
+    hdrs = ["image_compare.h"],
+    deps = [
+        "//systems/sensors:image",
+        "@googletest//:gtest_for_library",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkIOImage",
+    ],
+)
+
+add_lint_tests()

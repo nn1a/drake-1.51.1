@@ -1,0 +1,114 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+drake_cc_library(
+    name = "constraint_solver",
+    srcs = ["constraint_solver.cc"],
+    hdrs = [
+        "constraint_problem_data.h",
+        "constraint_solver.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//solvers:moby_lcp_solver",
+    ],
+)
+
+drake_cc_library(
+    name = "rod2d_state_vector",
+    srcs = ["rod2d_state_vector.cc"],
+    hdrs = ["rod2d_state_vector.h"],
+    deps = [
+        "//common:dummy_value",
+        "//common:essential",
+        "//common:name_value",
+        "//common/symbolic:expression",
+        "//systems/framework:vector",
+    ],
+)
+
+drake_cc_binary(
+    name = "rod2d_sim",
+    srcs = ["rod2d_sim.cc"],
+    add_test_rule = 1,
+    test_rule_args = [" --sim_duration=0.01"],
+    deps = [
+        ":rod2d",
+        ":rod2d_geometry",
+        "//common:essential",
+        "//geometry:drake_visualizer",
+        "//systems/analysis:implicit_euler_integrator",
+        "//systems/analysis:runge_kutta3_integrator",
+        "//systems/analysis:simulator",
+        "//systems/framework",
+        "@gflags",
+    ],
+)
+
+drake_cc_library(
+    name = "rod2d",
+    srcs = ["rod2d.cc"],
+    hdrs = [
+        "rod2d.h",
+    ],
+    deps = [
+        ":constraint_solver",
+        ":rod2d_state_vector",
+        "//common:essential",
+        "//solvers:mathematical_program",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
+    name = "rod2d_geometry",
+    srcs = ["rod2d_geometry.cc"],
+    hdrs = [
+        "rod2d_geometry.h",
+    ],
+    deps = [
+        "//geometry:geometry_frame",
+        "//geometry:geometry_ids",
+        "//geometry:geometry_instance",
+        "//geometry:geometry_roles",
+        "//geometry:kinematics_vector",
+        "//geometry:rgba",
+        "//geometry:scene_graph",
+        "//math:geometric_transform",
+        "//systems/framework:diagram_builder",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "constraint_solver_test",
+    deps = [
+        ":constraint_solver",
+        ":rod2d",
+        "//solvers:moby_lcp_solver",
+        "//solvers:unrevised_lemke_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rod2d_test",
+    deps = [
+        ":constraint_solver",
+        ":rod2d",
+        "//common:essential",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//systems/analysis:simulator",
+    ],
+)
+
+add_lint_tests()

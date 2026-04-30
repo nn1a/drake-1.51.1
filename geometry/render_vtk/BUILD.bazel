@@ -1,0 +1,325 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_optional.bzl",
+    "drake_cc_optional_library",
+    "drake_cc_variant_library",
+)
+load("//tools/skylark:drake_sh.bzl", "drake_sh_test")
+load("//tools/skylark:test_tags.bzl", "vtk_test_tags")
+
+# This render_vtk package is only implemented when
+# //tools/flags:with_render_vtk is True. When False, only the factory is
+# available and it will always throw an exception. When True, the factory is
+# the sole public entry point, even though the implementation is made up of
+# several other distinct components.
+#
+# Only the package-level library //geometry/render_vtk is public as a Bazel
+# target; all of the other targets are private.
+
+package(default_visibility = ["//visibility:private"])
+
+config_setting(
+    name = "enabled",
+    flag_values = {"//tools/flags:with_render_vtk": "True"},
+)
+
+drake_cc_package_library(
+    name = "render_vtk",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":factory",
+        ":render_engine_vtk_params",
+    ],
+)
+
+drake_cc_library(
+    name = "render_engine_vtk_params",
+    srcs = ["render_engine_vtk_params.cc"],
+    hdrs = ["render_engine_vtk_params.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common:essential",
+        "//common:name_value",
+        "//common:string_container",
+        "//geometry/render:light_parameter",
+        "//geometry/render:render_label",
+    ],
+)
+
+drake_cc_variant_library(
+    name = "factory",
+    opt_in_condition = ":enabled",
+    srcs_always = [],
+    srcs_enabled = ["factory.cc"],
+    srcs_disabled = ["no_factory.cc"],
+    hdrs = ["factory.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":render_engine_vtk_params",
+        "//geometry/render:render_engine",
+    ],
+    implementation_deps_always = [],
+    implementation_deps_enabled = [
+        ":internal_render_engine_vtk",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_make_render_window",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_make_render_window.cc"],
+    hdrs = ["internal_make_render_window.h"],
+    visibility = [
+        "//geometry/render_gltf_client:__pkg__",
+    ],
+    deps = [
+        ":render_engine_vtk_params",
+        "//common:essential",
+        "//common:unused",
+        "//geometry/render_gl:internal_loaders",
+        "@vtk_internal//:vtkRenderingCore",
+        "@vtk_internal//:vtkRenderingOpenGL2",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_render_engine_vtk",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_render_engine_vtk.cc"],
+    hdrs = ["internal_render_engine_vtk.h"],
+    visibility = [
+        "//geometry/render_gltf_client:__pkg__",
+    ],
+    deps = [
+        ":internal_make_render_window",
+        ":internal_render_engine_vtk_base",
+        ":internal_vtk_util",
+        "//common",
+        "//common/yaml:yaml_io",
+        "//geometry:vtk_gltf_uri_loader",
+        "//geometry/proximity:polygon_to_triangle_mesh",
+        "//geometry/render:render_engine",
+        "//geometry/render:render_mesh",
+        "//geometry/render/shaders:depth_shaders",
+        "//geometry/render_vtk:render_engine_vtk_params",
+        "//systems/sensors:vtk_diagnostic_event_observer",
+        "//tools/workspace/vtk_internal:vtk_opengl_init",
+        "@eigen",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonExecutionModel",
+        "@vtk_internal//:vtkCommonTransforms",
+        "@vtk_internal//:vtkFiltersSources",
+        "@vtk_internal//:vtkIOCore",
+        "@vtk_internal//:vtkIOGeometry",
+        "@vtk_internal//:vtkIOImage",
+        "@vtk_internal//:vtkIOImport",
+        "@vtk_internal//:vtkImagingCore",
+        "@vtk_internal//:vtkRenderingCore",
+        "@vtk_internal//:vtkRenderingOpenGL2",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_render_engine_vtk_base",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_render_engine_vtk_base.cc"],
+    hdrs = ["internal_render_engine_vtk_base.h"],
+    deps = [
+        "//common:scope_exit",
+        "//geometry:geometry_roles",
+        "//geometry:shape_specification",
+        "//geometry/render:render_material",
+        "//geometry/render:render_mesh",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonDataModel",
+        "@vtk_internal//:vtkCommonExecutionModel",
+        "@vtk_internal//:vtkCommonTransforms",
+        "@vtk_internal//:vtkFiltersGeneral",
+        "@vtk_internal//:vtkFiltersSources",
+    ],
+)
+
+drake_cc_optional_library(
+    name = "internal_vtk_util",
+    opt_in_condition = ":enabled",
+    srcs = ["internal_vtk_util.cc"],
+    hdrs = ["internal_vtk_util.h"],
+    deps = [
+        "//common:essential",
+        "//math:geometric_transform",
+        "@eigen",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonTransforms",
+        "@vtk_internal//:vtkFiltersSources",
+    ],
+)
+
+config_setting(
+    name = "osx",
+    constraint_values = ["@platforms//os:osx"],
+)
+
+drake_cc_googletest(
+    name = "internal_render_engine_vtk_test",
+    timeout = "moderate",
+    data = [
+        ":test/multi_material_mesh.png",
+        ":test/ssao_reference.png",
+        ":test/whole_image_custom_color.png",
+        ":test/whole_image_custom_depth.png",
+        ":test/whole_image_custom_label.png",
+        ":test/whole_image_default_color.png",
+        ":test/whole_image_default_depth.png",
+        ":test/whole_image_default_label.png",
+        "//examples/scene_graph:models",
+        "//geometry:environment_maps",
+        "//geometry:test_gltf_files",
+        "//geometry:test_obj_files",
+        "//geometry/render:test_models",
+    ],
+    tags = vtk_test_tags(),
+    deps = [
+        ":internal_render_engine_vtk",
+        "//common:find_resource",
+        "//common/test_utilities",
+        "//geometry:read_gltf_to_memory",
+        "//geometry/test_utilities:dummy_render_engine",
+        "//math:geometric_transform",
+        "//systems/sensors:image_io",
+        "//systems/sensors/test_utilities:image_compare",
+        "//visualization:colorize_depth_image",
+        "@vtk_internal//:vtkRenderingCore",
+        "@vtk_internal//:vtkRenderingOpenGL2",
+    ],
+)
+
+# Re-run internal_render_engine_vtk_test, but with the GLX backend.
+drake_sh_test(
+    name = "internal_render_engine_vtk_glx_test",
+    timeout = "moderate",
+    srcs = ["internal_render_engine_vtk_test"],
+    args = select({
+        ":osx": [
+            # GLX is a Linux-only feature.
+            "--gtest_filter=-*",
+        ],
+        "//conditions:default": [
+            "--backend=GLX",
+        ],
+    }),
+    data = [
+        ":internal_render_engine_vtk_test",
+    ],
+    display = True,
+    tags = vtk_test_tags(),
+)
+
+drake_cc_googletest(
+    name = "internal_render_engine_vtk_no_display_test",
+    args = select({
+        # This test only makes sense on Linux, because only Linux uses the
+        # DISPLAY environment variable to connect to the graphics system.
+        ":osx": ["--gtest_filter=-*"],
+        "//conditions:default": [],
+    }),
+    tags = vtk_test_tags(),
+    deps = [
+        ":factory",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_vtk_util_test",
+    deps = [
+        ":internal_vtk_util",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkCommonDataModel",
+        "@vtk_internal//:vtkFiltersSources",
+    ],
+)
+
+drake_cc_googletest(
+    name = "render_engine_vtk_params_test",
+    deps = [
+        ":render_engine_vtk_params",
+        "//common/test_utilities:expect_throws_message",
+        "//common/yaml",
+    ],
+)
+
+# The generated glTF file can be removed when we're no longer testing the glTF
+# parser patch (see :internal_vtk_gltf_parser_patch_test).
+
+genrule(
+    name = "gltf_pyramid_no_color_texture",
+    srcs = ["//geometry/render:test/meshes/fully_textured_pyramid.gltf"],
+    outs = ["test/pyramid_no_color_texture.gltf"],
+    cmd = "sed '/baseColorTexture/,/},/d' $< > $@",
+)
+
+PYRAMID_RESOURCES = [
+    "fully_textured_pyramid_base_color.png",
+    "fully_textured_pyramid_base_color.ktx2",
+    "fully_textured_pyramid.bin",
+    "fully_textured_pyramid_emissive.png",
+    "fully_textured_pyramid_emissive.ktx2",
+    "fully_textured_pyramid.gltf",
+    "fully_textured_pyramid_normal.png",
+    "fully_textured_pyramid_normal.ktx2",
+    "fully_textured_pyramid_omr.png",
+    "fully_textured_pyramid_omr.ktx2",
+    "fully_textured_pyramid.sdf",
+]
+
+[
+    copy_file(
+        name = "_copy_" + x,
+        src = "//geometry/render:test/meshes/" + x,
+        out = "test/" + x,
+        allow_symlink = True,
+    )
+    for x in PYRAMID_RESOURCES
+]
+
+filegroup(
+    name = "patch_test_models",
+    testonly = 1,
+    srcs = [
+        ":gltf_pyramid_no_color_texture",
+    ] + [
+        ":test/" + x
+        for x in PYRAMID_RESOURCES
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_vtk_gltf_parser_patch_test",
+    data = [":patch_test_models"],
+    deps = [
+        ":factory",
+        "//common:find_resource",
+        "@vtk_internal//:vtkCommonCore",
+        "@vtk_internal//:vtkIOImport",
+        "@vtk_internal//:vtkRenderingCore",
+    ],
+)
+
+drake_cc_googletest(
+    name = "internal_no_render_vtk_test",
+    deps = [
+        # The ":factory_disabled" target is created by the
+        # drake_cc_variant_library(...) stanza above.
+        ":factory_disabled",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+add_lint_tests()

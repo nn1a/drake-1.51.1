@@ -1,0 +1,89 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "query_results",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":contact_surface",
+        ":deformable_contact",
+        ":penetration_as_point_pair",
+        ":signed_distance_pair",
+        ":signed_distance_to_point",
+    ],
+)
+
+drake_cc_library(
+    name = "penetration_as_point_pair",
+    srcs = [],
+    hdrs = ["penetration_as_point_pair.h"],
+    deps = [
+        "//common:essential",
+        "//geometry:geometry_ids",
+    ],
+)
+
+drake_cc_library(
+    name = "signed_distance_pair",
+    srcs = [],
+    hdrs = ["signed_distance_pair.h"],
+    deps = [
+        "//common",
+        "//geometry:geometry_ids",
+    ],
+)
+
+drake_cc_library(
+    name = "signed_distance_to_point",
+    srcs = [],
+    hdrs = ["signed_distance_to_point.h"],
+    deps = [
+        "//common",
+        "//geometry:geometry_ids",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_surface",
+    srcs = [
+        "contact_surface.cc",
+    ],
+    hdrs = [
+        "contact_surface.h",
+    ],
+    deps = [
+        "//common",
+        "//geometry:geometry_ids",
+        "//geometry/proximity:mesh_field",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "deformable_contact",
+    srcs = ["deformable_contact.cc"],
+    hdrs = ["deformable_contact.h"],
+    deps = [
+        "//geometry:geometry_ids",
+        "//geometry/proximity:polygon_surface_mesh",
+        "//multibody/contact_solvers/sap:partial_permutation",
+    ],
+)
+
+drake_cc_googletest(
+    name = "deformable_contact_test",
+    deps = [
+        ":deformable_contact",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry/proximity:make_box_mesh",
+    ],
+)
+
+add_lint_tests()

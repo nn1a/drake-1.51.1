@@ -1,0 +1,98 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "proto",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":call_python",
+        ":rpc_pipe_temp_directory",
+    ],
+)
+
+drake_cc_library(
+    name = "call_python",
+    srcs = ["call_python.cc"],
+    hdrs = ["call_python.h"],
+    deps = [
+        ":rpc_pipe_temp_directory",
+        "//common:essential",
+        "//lcmtypes:lcmtypes_drake_cc",
+    ],
+)
+
+drake_py_library(
+    name = "call_python_client",
+    srcs = ["call_python_client.py"],
+    imports = ["."],
+    deps = [
+        "//lcmtypes:lcmtypes_drake_py",
+    ],
+)
+
+drake_py_binary(
+    name = "call_python_client_cli",
+    srcs = ["call_python_client.py"],
+    main = "call_python_client.py",
+    deps = [
+        ":call_python_client",
+    ],
+)
+
+drake_cc_library(
+    name = "rpc_pipe_temp_directory",
+    srcs = ["rpc_pipe_temp_directory.cc"],
+    hdrs = ["rpc_pipe_temp_directory.h"],
+    visibility = ["//visibility:private"],
+    implementation_deps = [
+        "//common:essential",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "call_python_server_test",
+    tags = ["manual"],
+    deps = [
+        ":call_python",
+    ],
+)
+
+# TODO(eric.cousineau): Add a test which will use an interactive matplotlib
+# backend on CI only.
+drake_py_unittest(
+    name = "call_python_test",
+    data = [
+        ":call_python_client_cli",
+        ":call_python_server_test",
+    ],
+    # TODO(eric.cousineau): Find the source of sporadic CI failures.
+    flaky = 1,
+    # We wish to access neighboring files.
+    isolate = 0,
+    # Fails when run under Valgrind tools.
+    tags = ["no_valgrind_tools"],
+)
+
+drake_cc_googletest(
+    name = "rpc_pipe_temp_directory_test",
+    deps = [
+        ":rpc_pipe_temp_directory",
+    ],
+)
+
+add_lint_tests()

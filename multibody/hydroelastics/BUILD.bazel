@@ -1,0 +1,54 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "doxygen_input",
+    srcs = [
+        "hydroelastic_user_guide_doxygen.h",
+    ] + glob([
+        "images/*.jpg",
+        "images/*.png",
+    ]),
+    tags = ["nolint"],
+    visibility = ["//doc/doxygen_cxx:__pkg__"],
+)
+
+drake_cc_package_library(
+    name = "hydroelastics",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":hydroelastic_engine",
+    ],
+)
+
+drake_cc_library(
+    name = "hydroelastic_engine",
+    srcs = [
+        "hydroelastic_engine.cc",
+    ],
+    hdrs = [
+        "hydroelastic_engine.h",
+    ],
+    deps = [
+        "//geometry:scene_graph",
+        "//geometry:scene_graph_inspector",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hydroelastic_engine_test",
+    deps = [
+        ":hydroelastic_engine",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry:scene_graph",
+    ],
+)
+
+add_lint_tests()

@@ -1,0 +1,14 @@
+[Clarabel.cpp] Enable the SDP feature by default
+
+Reasoning for not upstreaming this patch: changing an option, which is
+our prerogative but not relevant for upstream.
+
+--- rust_wrapper/Cargo.toml
++++ rust_wrapper/Cargo.toml
+@@ -14,5 +14,5 @@
+ 
+ [features]
+-default = []
++default = ["clarabel/sdp"]
+ sdp = []
+ serde = ["dep:serde"]

@@ -1,0 +1,612 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "math",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":autodiff",
+        ":barycentric",
+        ":binomial_coefficient",
+        ":bspline_basis",
+        ":compute_numerical_gradient",
+        ":continuous_algebraic_riccati_equation",
+        ":continuous_lyapunov_equation",
+        ":discrete_algebraic_riccati_equation",
+        ":discrete_lyapunov_equation",
+        ":eigen_sparse_triplet",
+        ":evenly_distributed_pts_on_sphere",
+        ":fourth_order_tensor",
+        ":geometric_transform",
+        ":gradient",
+        ":gray_code",
+        ":jacobian",
+        ":linear_solve",
+        ":matrix_util",
+        ":quadratic_form",
+        ":soft_min_max",
+        ":vector3_util",
+        ":wrap_to",
+    ],
+)
+
+drake_cc_library(
+    name = "autodiff",
+    srcs = ["autodiff.cc"],
+    hdrs = ["autodiff.h"],
+    deps = [
+        "//common:autodiff",
+        "//common:essential",
+        "//common:unused",
+    ],
+)
+
+drake_cc_library(
+    name = "barycentric",
+    srcs = ["barycentric.cc"],
+    hdrs = ["barycentric.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "binomial_coefficient",
+    srcs = ["binomial_coefficient.cc"],
+    hdrs = ["binomial_coefficient.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "bspline_basis",
+    srcs = [
+        "bspline_basis.cc",
+    ],
+    hdrs = [
+        "bspline_basis.h",
+        "knot_vector_type.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:name_value",
+    ],
+)
+
+drake_cc_library(
+    name = "compute_numerical_gradient",
+    srcs = [],
+    hdrs = ["compute_numerical_gradient.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "continuous_algebraic_riccati_equation",
+    srcs = ["continuous_algebraic_riccati_equation.cc"],
+    hdrs = ["continuous_algebraic_riccati_equation.h"],
+    deps = [],
+    implementation_deps = [
+        "//common:essential",
+        "//common:is_approx_equal_abstol",
+        # TODO(jwnimmer-tri) Move this code into //math to avoid the circular
+        # dependency.
+        "//systems/primitives:linear_system_internal",
+    ],
+)
+
+drake_cc_library(
+    name = "discrete_algebraic_riccati_equation",
+    srcs = ["discrete_algebraic_riccati_equation.cc"],
+    hdrs = ["discrete_algebraic_riccati_equation.h"],
+    deps = [
+        "//common:essential",
+        "//common:is_approx_equal_abstol",
+        # TODO(jwnimmer-tri) Move this code into //math to avoid the circular
+        # dependency.
+        "//systems/primitives:linear_system_internal",
+    ],
+)
+
+drake_cc_library(
+    name = "continuous_lyapunov_equation",
+    srcs = ["continuous_lyapunov_equation.cc"],
+    hdrs = ["continuous_lyapunov_equation.h"],
+    deps = [
+        "//common:is_approx_equal_abstol",
+    ],
+)
+
+drake_cc_library(
+    name = "discrete_lyapunov_equation",
+    srcs = ["discrete_lyapunov_equation.cc"],
+    hdrs = ["discrete_lyapunov_equation.h"],
+    deps = [
+        "//common:is_approx_equal_abstol",
+    ],
+)
+
+drake_cc_library(
+    name = "fourth_order_tensor",
+    srcs = ["fourth_order_tensor.cc"],
+    hdrs = ["fourth_order_tensor.h"],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+# TODO(jwnimmer-tri) Improved name for this library, "pose_representations"?
+drake_cc_library(
+    name = "geometric_transform",
+    srcs = [
+        "fast_pose_composition_functions.cc",
+        "hopf_coordinate.cc",
+        "quaternion.cc",
+        "random_rotation.cc",
+        "rigid_transform.cc",
+        "roll_pitch_yaw.cc",
+        "rotation_matrix.cc",
+    ],
+    hdrs = [
+        "fast_pose_composition_functions.h",
+        "hopf_coordinate.h",
+        "quaternion.h",
+        "random_rotation.h",
+        "rigid_transform.h",
+        "roll_pitch_yaw.h",
+        "rotation_matrix.h",
+    ],
+    copts = [
+        # These classes are so essential to performance, that even in Debug
+        # builds we want compiler optimizations to be enabled. If you are a
+        # developer trying to debug these files, you might want to comment
+        # this out temporarily.
+        "-O2",
+    ],
+    deps = [
+        ":vector3_util",
+        "//common:default_scalars",
+        "//common:drake_bool",
+        "//common:essential",
+        "//common:hash",
+        "//common:is_approx_equal_abstol",
+        "//common:unused",
+        "//math:gradient",
+    ],
+    implementation_deps = [
+        "//common:hwy_dynamic",
+        "@highway_internal//:hwy",
+    ],
+)
+
+drake_cc_library(
+    name = "linear_solve",
+    srcs = ["linear_solve.cc"],
+    hdrs = ["linear_solve.h"],
+    deps = [
+        ":gradient",
+        "//common/symbolic:expression",
+    ],
+)
+
+drake_cc_library(
+    name = "vector3_util",
+    srcs = [
+        "cross_product.cc",
+        "unit_vector.cc",
+    ],
+    hdrs = [
+        "convert_time_derivative.h",
+        "cross_product.h",
+        "unit_vector.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:unused",
+        "//math:autodiff",
+    ],
+)
+
+drake_cc_library(
+    name = "gradient",
+    srcs = [
+        "autodiff_gradient.cc",
+        "differentiable_norm.cc",
+        "gradient.cc",
+        "normalize_vector.cc",
+        "rotation_conversion_gradient.cc",
+    ],
+    hdrs = [
+        "autodiff_gradient.h",
+        "differentiable_norm.h",
+        "gradient.h",
+        "gradient_util.h",
+        "normalize_vector.h",
+        "rotation_conversion_gradient.h",
+    ],
+    deps = [
+        ":autodiff",
+        ":vector3_util",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "matrix_util",
+    srcs = ["matrix_util.cc"],
+    hdrs = ["matrix_util.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "eigen_sparse_triplet",
+    srcs = ["eigen_sparse_triplet.cc"],
+    hdrs = ["eigen_sparse_triplet.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "evenly_distributed_pts_on_sphere",
+    srcs = ["evenly_distributed_pts_on_sphere.cc"],
+    hdrs = ["evenly_distributed_pts_on_sphere.h"],
+    deps = ["@eigen"],
+)
+
+drake_cc_library(
+    name = "gray_code",
+    srcs = ["gray_code.cc"],
+    hdrs = ["gray_code.h"],
+    deps = [
+        "//common:essential",
+        "@eigen",
+    ],
+)
+
+drake_cc_library(
+    name = "jacobian",
+    srcs = ["jacobian.cc"],
+    hdrs = ["jacobian.h"],
+    deps = [
+        "//common:autodiff",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "quadratic_form",
+    srcs = ["quadratic_form.cc"],
+    hdrs = ["quadratic_form.h"],
+    deps = [
+        ":matrix_util",
+        "//common:essential",
+        "@eigen",
+    ],
+)
+
+drake_cc_library(
+    name = "soft_min_max",
+    srcs = ["soft_min_max.cc"],
+    hdrs = ["soft_min_max.h"],
+    deps = [
+        "//common:autodiff",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "wrap_to",
+    srcs = [],
+    hdrs = ["wrap_to.h"],
+    deps = [
+        "//common:double",
+        "//common:essential",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "autodiff_test",
+    deps = [
+        ":autodiff",
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//common/test_utilities:limit_malloc",
+    ],
+)
+
+drake_cc_googletest(
+    name = "barycentric_test",
+    deps = [
+        ":barycentric",
+        "//common/symbolic:expression",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "binomial_coefficient_test",
+    deps = [
+        ":binomial_coefficient",
+    ],
+)
+
+drake_cc_googletest(
+    name = "bspline_basis_test",
+    deps = [
+        ":bspline_basis",
+        "//common/test_utilities",
+        "//common/yaml",
+    ],
+)
+
+drake_cc_googletest(
+    name = "compute_numerical_gradient_test",
+    deps = [
+        ":autodiff",
+        ":compute_numerical_gradient",
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//solvers:evaluator_base",
+    ],
+)
+
+drake_cc_googletest(
+    name = "continuous_algebraic_riccati_equation_test",
+    deps = [
+        ":continuous_algebraic_riccati_equation",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "continuous_lyapunov_equation_test",
+    deps = [
+        ":continuous_lyapunov_equation",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "cross_product_test",
+    deps = [
+        ":vector3_util",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "convert_time_derivative_test",
+    deps = [
+        ":vector3_util",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "differentiable_norm_test",
+    deps = [
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "discrete_algebraic_riccati_equation_test",
+    deps = [
+        ":discrete_algebraic_riccati_equation",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "discrete_lyapunov_equation_test",
+    deps = [
+        ":discrete_lyapunov_equation",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+    ],
+)
+
+drake_cc_googletest(
+    name = "evenly_distributed_pts_on_sphere_test",
+    deps = [
+        ":evenly_distributed_pts_on_sphere",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "eigen_sparse_triplet_test",
+    deps = [
+        ":eigen_sparse_triplet",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "fourth_order_tensor_test",
+    deps = [
+        ":fourth_order_tensor",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "jacobian_test",
+    copts = ["-Wno-deprecated-declarations"],
+    deps = [
+        ":gradient",
+        ":jacobian",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "gradient_util_test",
+    deps = [
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "gray_code_test",
+    deps = [
+        ":gray_code",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hopf_coordinate_test",
+    deps = [
+        ":geometric_transform",
+    ],
+)
+
+drake_cc_googletest(
+    name = "linear_solve_test",
+    deps = [
+        ":linear_solve",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//common/test_utilities:symbolic_test_util",
+    ],
+)
+
+drake_cc_googletest(
+    name = "matrix_util_test",
+    deps = [
+        ":matrix_util",
+        "//common/symbolic:expression",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "normalize_vector_test",
+    deps = [
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "quadratic_form_test",
+    deps = [
+        ":geometric_transform",
+        ":quadratic_form",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "quaternion_test",
+    deps = [
+        ":autodiff",
+        ":geometric_transform",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "random_rotation_test",
+    deps = [
+        ":geometric_transform",
+        "//common/symbolic:expression",
+    ],
+)
+
+drake_cc_googletest(
+    name = "roll_pitch_yaw_test",
+    deps = [
+        ":geometric_transform",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rotation_matrix_test",
+    deps = [
+        ":geometric_transform",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rotation_conversion_test",
+    deps = [
+        ":geometric_transform",
+        ":gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rigid_transform_test",
+    deps = [
+        ":autodiff",
+        ":geometric_transform",
+        "//common/test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "soft_min_max_test",
+    deps = [
+        ":soft_min_max",
+        "//common/test_utilities:eigen_matrix_compare",
+        "@eigen",
+    ],
+)
+
+drake_cc_googletest(
+    name = "unit_vector_test",
+    deps = [
+        ":vector3_util",
+        "//common/symbolic:expression",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "wrap_to_test",
+    deps = [
+        ":wrap_to",
+    ],
+)
+
+drake_cc_googletest(
+    name = "fast_pose_composition_functions_test",
+    deps = [
+        ":geometric_transform",
+        "//common:essential",
+        "//common:hwy_dynamic",
+        "//common/test_utilities:eigen_matrix_compare",
+        "@highway_internal//:hwy_test_util",
+    ],
+)
+
+add_lint_tests()

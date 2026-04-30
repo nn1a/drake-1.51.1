@@ -1,0 +1,80 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+drake_cc_package_library(
+    name = "rational",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":rational_forward_kinematics",
+    ],
+)
+
+drake_cc_library(
+    name = "rational_forward_kinematics",
+    srcs = [
+        "rational_forward_kinematics.cc",
+        "rational_forward_kinematics_internal.cc",
+    ],
+    hdrs = [
+        "rational_forward_kinematics.h",
+        "rational_forward_kinematics_internal.h",
+    ],
+    deps = [
+        "//common/symbolic:expression",
+        "//common/symbolic:polynomial",
+        "//common/symbolic:rational_function",
+        "//common/symbolic:trigonometric_polynomial",
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_library(
+    name = "rational_forward_kinematics_test_utilities",
+    testonly = 1,
+    srcs = ["test/rational_forward_kinematics_test_utilities.cc"],
+    hdrs = ["test/rational_forward_kinematics_test_utilities.h"],
+    data = [
+        "//examples/kuka_iiwa_arm:models",
+        "@drake_models//:iiwa_description",
+        "@drake_models//:wsg_50_description",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        "//multibody/benchmarks/kuka_iiwa_robot",
+        "//multibody/parsing:parser",
+        "//multibody/plant",
+        "//solvers:solve",
+        "@googletest//:gtest_for_library",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rational_forward_kinematics_internal_test",
+    deps = [
+        ":rational_forward_kinematics",
+        ":rational_forward_kinematics_test_utilities",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rational_forward_kinematics_test",
+    timeout = "moderate",
+    shard_count = 4,
+    deps = [
+        ":rational_forward_kinematics",
+        ":rational_forward_kinematics_test_utilities",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:symbolic_test_util",
+    ],
+)
+
+add_lint_tests()

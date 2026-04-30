@@ -1,0 +1,67 @@
+package drake;
+
+struct lcmt_hydroelastic_contact_surface_for_viz {
+  // The contact is between two bodies, but we track multiple names per body
+  // so that visualizers can fully disambiguate contacts:
+  //
+  //   - name of the geometry affixed to the body which produced the surface.
+  //   - name of the body.
+  //   - name of the model instance to which the body belongs.
+  //   - uniqueness of the body name. If unique, the body can unambiguously be
+  //     represented by just its body name. Otherwise it must be combined with
+  //     its model instance name. The validity of this logic relies on
+  //     MultibodyPlant's requirement that model instance names must be unique.
+  //   - the number of collision geometries affixed to the body. If the
+  //     colliding bodies both have a single collision geometry each, there can
+  //     be only one contact surface between them and display can be
+  //     streamlined. Otherwise, the possibility of multiple contact surfaces
+  //     needs to be accounted for.
+  //
+  string geometry1_name;
+  string body1_name;
+  string model1_name;
+  boolean body1_unique;
+  int32_t collision_count1;
+
+  string geometry2_name;
+  string body2_name;
+  string model2_name;
+  boolean body2_unique;
+  int32_t collision_count2;
+
+  // The centroid of the contact surface, as an offset vector expressed in the
+  // world frame.
+  double centroid_W[3];
+
+  // The force, expressed in the world frame, that is applied to `body1_name`
+  // at the centroid of the contact surface.
+  double force_C_W[3];
+
+  // The moment, expressed in the world frame, that is applied to `body1_name`
+  // at the centroid of the contact surface.
+  double moment_C_W[3];
+
+  // Vestigial. Always zero.
+  int32_t num_quadrature_points;
+
+  // Vestigial. Always empty.
+  lcmt_hydroelastic_quadrature_per_point_data_for_viz
+      quadrature_point_data[num_quadrature_points];
+
+  // The vertices.
+  int32_t num_vertices;
+  // TODO(SeanCurtis-TRI): It would be nice to have a simple Vector3 type here,
+  //  but the concept of a 3D point is perfectly sufficient.
+  lcmt_point p_WV[num_vertices];
+
+  // Pressure values at each vertex.
+  double pressure[num_vertices];
+
+  // The polygons are encoded in one long stream as
+  // c0, v00, v01, ..., c1, v10, v11, ...
+  // Such that each polygon has a count of vertices ci, followed by ci number
+  // of 0-indexed indices into the vertex set. The total number of integer
+  // values is recorded here.
+  int32_t poly_data_int_count;
+  int32_t poly_data[poly_data_int_count];
+}

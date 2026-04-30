@@ -1,0 +1,56 @@
+load("//tools/install:install.bzl", "install_files")
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+# Make our package requirements (but not manual scripts) available to
+# downstream projects.
+exports_files([
+    "mac/binary_distribution/Brewfile",
+    "mac/source_distribution/Brewfile",
+    "python/pdm.lock",
+    "python/pyproject.toml",
+    "python/requirements.txt",
+    "ubuntu/binary_distribution/packages-jammy.txt",
+    "ubuntu/source_distribution/packages-jammy.txt",
+    "ubuntu/source_distribution/packages-jammy-clang.txt",
+    "ubuntu/source_distribution/packages-jammy-doc-only.txt",
+    "ubuntu/source_distribution/packages-jammy-maintainer-only.txt",
+    "ubuntu/source_distribution/packages-jammy-test-only.txt",
+    "ubuntu/binary_distribution/packages-noble.txt",
+    "ubuntu/source_distribution/packages-noble.txt",
+    "ubuntu/source_distribution/packages-noble-clang.txt",
+    "ubuntu/source_distribution/packages-noble-doc-only.txt",
+    "ubuntu/source_distribution/packages-noble-maintainer-only.txt",
+    "ubuntu/source_distribution/packages-noble-test-only.txt",
+])
+
+install_files(
+    name = "install",
+    dest = "share/drake/setup",
+    files = select({
+        "//tools/cc_toolchain:apple": [
+            "mac/binary_distribution/Brewfile",
+            "mac/binary_distribution/install_prereqs.sh",
+            "python/pdm.lock",
+            "python/pyproject.toml",
+            "python/requirements.txt",
+        ],
+        "//tools/cc_toolchain:linux": [
+            "ubuntu/binary_distribution/install_prereqs.sh",
+            "ubuntu/binary_distribution/packages-jammy.txt",
+            "ubuntu/binary_distribution/packages-noble.txt",
+        ],
+        "//conditions:default": [],
+    }),
+    strip_prefix = [
+        "mac/binary_distribution",
+        "ubuntu/binary_distribution",
+        "python",
+    ],
+    rename = {
+        "share/drake/setup/install_prereqs.sh": "install_prereqs",
+    },
+)
+
+add_lint_tests()

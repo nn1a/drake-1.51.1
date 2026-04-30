@@ -1,0 +1,32 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(":defs.bzl", "python_version_txt")
+
+package(default_visibility = ["//visibility:public"])
+
+# Provides a text file containing the major.minor version number of the current
+# Python toolchain, without any newlines. This file may be used as srcs or data
+# for any other rule whose action needs to know the current python version.
+python_version_txt(
+    name = "python_version.txt",
+)
+
+# Provides a single point of control within Drake for how to compile a native
+# C/C++ Python module (e.g., for pybind11) for the current Python toolchain.
+# This may be used like it was a cc_library target that listed hdrs= and
+# includes= for the current Python's header files.
+alias(
+    name = "cc_headers",
+    actual = "@rules_python//python/cc:current_py_cc_headers",
+)
+
+# Provides a single point of control within Drake for how to link a native
+# C/C++ Python module (e.g., for pybind11) for the current Python toolchain.
+# This may be used like it was a cc_library target that listed linkopts= for
+# any libraries use by a Python module. Note that this is intended for linking
+# native modules, and does NOT link the libpython embedded runtime.
+alias(
+    name = "cc_libs",
+    actual = "@rules_python//python/cc:current_py_cc_libs",
+)
+
+add_lint_tests()

@@ -1,0 +1,96 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+load("@drake//tools/skylark:cc.bzl", "cc_binary", "cc_library")
+load(
+    "@drake//tools/skylark:py.bzl",
+    "py_binary",
+)
+load(
+    "@drake//tools/workspace/vtk_internal:rules.bzl",
+    "compile_all_modules",
+    "vtk_cc_module",
+)
+load(
+    "@drake//tools/workspace/vtk_internal:rules_common_core.bzl",
+    "generate_common_core_sources",
+)
+load(
+    "@drake//tools/workspace/vtk_internal:rules_rendering_opengl2.bzl",
+    "generate_rendering_opengl2_sources",
+)
+
+config_setting(
+    name = "osx",
+    constraint_values = ["@platforms//os:osx"],
+)
+
+# Necessary for @drake//tools/workspace/vtk_internal:data_to_header_test.
+exports_files(
+    [
+        "Rendering/OpenGL2/textures/BlueNoiseTexture64x64.jpg",
+        "Rendering/OpenGL2/glsl/vtkDepthOfFieldPassFS.glsl",
+    ],
+)
+
+# When the rules.bzl needs to declare an objc_library, it adds this to `deps`
+# to improve the error messages in case of a mis-configured build.
+cc_library(
+    name = "_on_macos_you_must_not_have_forcepic_in_your_bazelrc_file_see_drake_issue_20217",  # noqa
+    linkstatic = True,
+    features = ["-supports_pic"],
+    tags = ["manual"],
+)
+
+py_binary(
+    name = "data_to_header",
+    srcs = ["@drake//tools/workspace/vtk_internal:data_to_header.py"],
+    python_version = "PY3",
+    srcs_version = "PY3",
+)
+
+# Generate some source files on the fly, using Bazel re-implementations of
+# various CMake scripts.
+
+generate_common_core_sources()
+
+generate_rendering_opengl2_sources()
+
+# Add a cc_library rule for all modules in settings.bzl that are marked with
+# non-default visibility, and also add private cc_library rules for all of
+# their required transitive dependency modules (per the vtk.module metadata).
+
+compile_all_modules()
+
+# We offer some (unbuilt by default) programs to help with debugging.
+
+cc_binary(
+    name = "vtkProbeOpenGLVersion",
+    srcs = [
+        "Rendering/OpenGL2/vtkProbeOpenGLVersion.cxx",
+    ],
+    deps = [
+        ":vtkRenderingOpenGL2",
+        "@drake//tools/workspace/vtk_internal:vtk_opengl_init",
+    ],
+    linkstatic = True,
+)
+
+# Install any license notices.
+
+install(
+    name = "install",
+    docs = [
+        "Copyright.txt",
+        "ThirdParty/fast_float/vtkfast_float/LICENSE-MIT",
+        "ThirdParty/glad/vtkglad/LICENSE",
+        "ThirdParty/pugixml/vtkpugixml/LICENSE.md",
+        "ThirdParty/scn/vtkscn/LICENSE",
+        "ThirdParty/scn/vtkscn/LICENSE.nanorange",
+        "ThirdParty/token/vtktoken/license.md",
+        "ThirdParty/utf8/vtkutf8/LICENSE",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["drake_repository_metadata.json"])

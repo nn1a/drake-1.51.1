@@ -1,0 +1,135 @@
+#!/bin/bash
+#
+# Drake script to upgrade our requirements lock files.
+#
+# - Users can make edits to drake/setup/python/pyproject.toml, and then
+#   run this script to compile it to drake/setup/python/pdm.lock.
+#
+# - Users can make edits to drake/setup/python/mypy/requirements.in, and then
+#   run this script to compile it to drake/setup/python/mypy/requirements.txt.
+#
+# The --reuse option may be given to apply changes to pyproject.toml while
+# attempting to preserve existing version pins.
+#
+# This script should also be run periodically to update pinned Python packages
+# to the latest available versions.
+
+set -eux -o pipefail
+
+# When changing this, see drake/tools/workspace/python/README.md.
+readonly python_versions=( 3.10 3.11 3.12 3.13 3.14 )
+
+purge=1
+commit=
+files_to_commit=()
+lock_args=()
+while [ "${1:-}" != "" ]; do
+    case "$1" in
+        --reuse)
+            purge=
+            lock_args+=( --update-reuse )
+            ;;
+        --commit)
+            commit=1
+            ;;
+        *)
+            echo "Invalid command line argument, $1." >&2
+            exit 5
+    esac
+    shift
+done
+
+check_working_tree() {
+    paths_modified=($(
+        (git status --untracked-files=no --porcelain=v1 -- . || true) | \
+        (grep -vE '^.. pdm.lock$' || true)))
+    if [ ${#paths_modified[@]} != 0 ]; then
+        git status --untracked-files=no .
+        set +x
+        echo >&2
+        echo "Refusing to proceed while your working tree is dirty." >&2
+        echo "Commit your changes first or run without --commit." >&2
+        exit 1
+    fi
+}
+
+update_requirements() {
+    # Use PDM to generate a lock file for itself.
+    "${venv_pdm}/bin/pdm" lock -p "${project_pdm}"
+    sed $'/will be generated/{s/will be/is/\nq\n}' < "$1.in" > "$1"
+    "${venv_pdm}/bin/pdm" export -p "${project_pdm}" | grep -vE '^#' >> "$1"
+}
+
+# Chdir to the Drake root.
+cd "$(dirname $0)/../../.."
+readonly drake_python="$(bazel info output_base).drake_python"
+readonly project_drake="${drake_python}/project"
+readonly venv_pdm="${drake_python}/venv.pdm"
+readonly python="${venv_pdm}/bin/python"
+readonly workspace="$(pwd)/tools/workspace/python"
+
+# If committing, check that the working tree is clean (enough). Note that the
+# lock file is ignored.
+[ -z "${commit}" ] || check_working_tree
+
+# Ensure venv exists.
+bazel fetch @python//:all --force
+
+# Create a temporary project used to pin PDM itself.
+readonly project_pdm="$(mktemp -d)"
+cleanup() { rm -rf "${project_pdm}"; }
+trap cleanup EXIT
+
+cat > "${project_pdm}/pyproject.toml" <<EOF
+[project]
+name = "pdm-for-drake"
+$(grep -E '^requires-python' "${project_drake}/pyproject.toml")
+dependencies = [ "pdm" ]
+EOF
+
+(cd "${project_pdm}" && "${venv_pdm}/bin/pdm" use -f "${venv_pdm}")
+
+# Generate lock file for PDM and update requirements.txt.
+readonly requirements="./setup/python/requirements.txt"
+update_requirements "${requirements}"
+files_to_commit+=( "$(git diff --name-only HEAD -- "${requirements}")" )
+
+if [ ${#files_to_commit[@]} -gt 0 ]; then
+    # PDM needs to be updated.
+    bazel fetch @python//:all
+
+    # Update the PDM lock files (again). This probably won't do anything, but
+    # we do it just in case the newer PDM produces different pins.
+    update_requirements "${requirements}"
+fi
+
+# Update the Drake lock file.
+readonly lockfile="./setup/python/pdm.lock"
+if [ -n "${purge}" ]; then
+    rm "$lockfile"
+fi
+lock_args+=( -d -p "${project_drake}" -L "${lockfile}" --append )
+for py in "${python_versions[@]}"; do
+    "${venv_pdm}/bin/pdm" lock "${lock_args[@]}" --python ${py}
+done
+
+# Check for changes to the pdm lock file.
+files_to_commit+=( "$(git diff --name-only HEAD -- "${lockfile}")" )
+
+# Upgrade the mypy lockfile.
+readonly mypy_requirements="./setup/python/mypy/requirements.txt" 
+bazel run //setup/python/mypy:lock.update
+files_to_commit+=( "$(git diff --name-only HEAD -- "${mypy_requirements}")" )
+
+# If committing, do the commit.
+if [ -n "${commit}" ]; then
+    if [ ${#files_to_commit[@]} == 0 ]; then
+        set +x
+        echo
+        echo "No changes need to be committed."
+        exit 0
+    fi
+
+    message="[setup] Upgrade Python venv to latest"
+    git commit -m "${message}" -o "${files_to_commit[@]}"
+fi

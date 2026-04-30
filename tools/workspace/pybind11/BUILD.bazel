@@ -1,0 +1,19 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+# This alias provides a single point of control for defining which pybind11
+# library our tools/skylark/pybind.bzl macro should use.
+alias(
+    name = "pybind11",
+    actual = "@pybind11",
+    visibility = ["//visibility:public"],
+)
+
+exports_files(
+    [
+        "pybind11-config.cmake",
+        "pybind11-config-version.cmake",
+    ],
+    visibility = ["@pybind11//:__pkg__"],
+)
+
+add_lint_tests()

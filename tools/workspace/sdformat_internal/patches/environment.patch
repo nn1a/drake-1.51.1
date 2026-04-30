@@ -1,0 +1,27 @@
+[sdformat] Avoid use of Environment.hh
+
+We choose to opt-out the environment-variable-based include path tweaks
+defined by the SDFormat specification. Our design intent is that include
+files are always package:// URIs, never relative filenames.
+
+Reasoning for not upstreaming this patch: Drake-specific build option.
+
+--- src/SDF.cc
++++ src/SDF.cc
+@@ -38,6 +38,5 @@
+ #include "EmbeddedSdf.hh"
+ #include "Utils.hh"
+
+-#include <gz/utils/Environment.hh>
+
+ namespace sdf
+@@ -172,7 +171,8 @@ std::string findFile(sdf::Errors &_errors, const std::string &_filename,
+   }
+
+   std::string sdfPathEnv;
+-  if(gz::utils::env("SDF_PATH", sdfPathEnv))
++  // Drake opts-out the environment-variable-based include path tweaks.
++  if(false)
+   {
+     std::vector<std::string> paths = sdf::split(sdfPathEnv, ":");
+     for (std::vector<std::string>::iterator iter = paths.begin();

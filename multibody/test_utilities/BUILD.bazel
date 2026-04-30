@@ -1,0 +1,81 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_library(
+    name = "add_fixed_objects_to_plant",
+    testonly = 1,
+    srcs = [],
+    hdrs = ["add_fixed_objects_to_plant.h"],
+    data = [
+        "//examples/kuka_iiwa_arm/models",
+        "//examples/simple_gripper:models",
+    ],
+    deps = [
+        "//common:find_resource",
+        "//math:geometric_transform",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "floating_body_plant",
+    testonly = 1,
+    srcs = ["floating_body_plant.cc"],
+    hdrs = ["floating_body_plant.h"],
+    deps = [
+        "//common:default_scalars",
+        "//multibody/plant",
+    ],
+)
+
+drake_cc_library(
+    name = "robot_model",
+    testonly = 1,
+    srcs = ["robot_model.cc"],
+    hdrs = ["robot_model.h"],
+    data = [
+        "@drake_models//:dishes",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        "//common/test_utilities:maybe_pause_for_user",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//multibody/plant:compliant_contact_manager_tester",
+        "//visualization:visualization_config_functions",
+    ],
+)
+
+drake_cc_library(
+    name = "spatial_kinematics",
+    testonly = 1,
+    srcs = [],
+    hdrs = ["spatial_kinematics.h"],
+    deps = [
+        "//common:essential",
+        "//math:geometric_transform",
+        "//multibody/math:spatial_algebra",
+    ],
+)
+
+drake_cc_library(
+    name = "spatial_derivative",
+    testonly = 1,
+    srcs = [],
+    hdrs = ["spatial_derivative.h"],
+    deps = [
+        "//common:essential",
+        "//math:geometric_transform",
+        "//multibody/math:spatial_algebra",
+    ],
+)
+
+add_lint_tests()

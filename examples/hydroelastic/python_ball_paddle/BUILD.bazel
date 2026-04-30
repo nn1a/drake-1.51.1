@@ -1,0 +1,29 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load("//tools/skylark:drake_py.bzl", "drake_py_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+filegroup(
+    name = "models",
+    srcs = [
+        "ball.sdf",
+        "paddle.sdf",
+    ],
+    visibility = ["//:__pkg__"],
+)
+
+drake_py_binary(
+    name = "contact_sim_demo_py",
+    srcs = ["contact_sim_demo.py"],
+    add_test_rule = 1,
+    data = [":models"],
+    test_rule_args = [
+        "--target_realtime_rate=0",
+        "--simulation_time=0.1",
+    ],
+    deps = [
+        "//bindings/pydrake",
+    ],
+)
+
+add_lint_tests()

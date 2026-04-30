@@ -1,0 +1,23 @@
+# -*- bazel -*-
+
+load(":cc.bzl", "cc_library")
+load(":conversion.bzl", "split_cmake_list")
+
+EIGEN_DEFINES = split_cmake_list(
+    "$<TARGET_PROPERTY:Eigen3::Eigen,INTERFACE_COMPILE_DEFINITIONS>",
+)
+
+cc_library(
+    name = "eigen",
+    hdrs = glob(
+        [
+            "include/Eigen/**",
+            "include/unsupported/Eigen/**",
+        ],
+        allow_empty = False,
+    ),
+    defines = EIGEN_DEFINES,
+    includes = ["include"],
+    isystem = True,
+    visibility = ["//visibility:public"],
+)

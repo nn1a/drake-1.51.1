@@ -1,0 +1,24 @@
+# -*- bazel -*-
+
+load("@drake//tools/skylark:py.bzl", "py_library")
+
+licenses(["notice"])  # BSD-3-Clause
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "github3_py",
+    srcs = glob([
+        "src/github3/**",
+    ], allow_empty = False),
+    imports = [
+        "src",
+    ],
+    deps = [
+        "@uritemplate_py_internal//:uritemplate_py",
+    ],
+)
+
+exports_files(["drake_repository_metadata.json"])

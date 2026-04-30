@@ -1,0 +1,33 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+drake_cc_binary(
+    name = "inclined_plane_with_body",
+    srcs = [
+        "inclined_plane_with_body.cc",
+    ],
+    add_test_rule = 1,
+    test_rule_args = [
+        "--simulation_time=0.1",
+        "--target_realtime_rate=0.0",
+    ],
+    deps = [
+        "//common:add_text_logging_gflags",
+        "//lcm",
+        "//multibody/benchmarks/inclined_plane",
+        "//multibody/plant:contact_results_to_lcm",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//visualization",
+        "@gflags",
+    ],
+)
+
+add_lint_tests()

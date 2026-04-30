@@ -1,0 +1,56 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "acrobot",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":analytical_acrobot",
+        ":make_acrobot_plant",
+    ],
+)
+
+drake_cc_library(
+    name = "analytical_acrobot",
+    srcs = ["acrobot.cc"],
+    hdrs = ["acrobot.h"],
+    deps = [
+        "//common:default_scalars",
+        "//common:extract_double",
+        "//math:geometric_transform",
+    ],
+)
+
+filegroup(
+    name = "models",
+    srcs = [
+        "acrobot.sdf",
+        "acrobot.urdf",
+        "acrobot.xml",
+        "double_pendulum.urdf",
+    ],
+)
+
+drake_cc_library(
+    name = "make_acrobot_plant",
+    srcs = [
+        "make_acrobot_plant.cc",
+    ],
+    hdrs = [
+        "make_acrobot_plant.h",
+    ],
+    deps = [
+        "//geometry:scene_graph",
+        "//math:geometric_transform",
+        "//multibody/plant",
+    ],
+)
+
+add_lint_tests()

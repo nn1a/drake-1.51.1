@@ -1,0 +1,231 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "trajectory_optimization",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":direct_collocation",
+        ":direct_transcription",
+        ":gcs_trajectory_optimization",
+        ":integration_constraint",
+        ":kinematic_trajectory_optimization",
+        ":multiple_shooting",
+        ":sequential_expression_manager",
+    ],
+)
+
+drake_cc_library(
+    name = "sequential_expression_manager",
+    srcs = ["sequential_expression_manager.cc"],
+    hdrs = [
+        "sequential_expression_manager.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//common:string_container",
+        "//common:unused",
+        "//common/symbolic:expression",
+    ],
+)
+
+drake_cc_library(
+    name = "multiple_shooting",
+    srcs = ["multiple_shooting.cc"],
+    hdrs = ["multiple_shooting.h"],
+    deps = [
+        ":sequential_expression_manager",
+        "//common:essential",
+        "//common/trajectories:piecewise_polynomial",
+        "//solvers:ipopt_solver",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_library(
+    name = "direct_collocation",
+    srcs = [
+        "direct_collocation.cc",
+    ],
+    hdrs = [
+        "direct_collocation.h",
+    ],
+    deps = [
+        ":multiple_shooting",
+        "//math:autodiff",
+        "//math:gradient",
+        "//systems/framework",
+    ],
+)
+
+drake_cc_library(
+    name = "direct_transcription",
+    srcs = [
+        "direct_transcription.cc",
+    ],
+    hdrs = [
+        "direct_transcription.h",
+    ],
+    deps = [
+        ":multiple_shooting",
+        "//common/symbolic:polynomial",
+        "//common/trajectories:piecewise_polynomial",
+        "//math:autodiff",
+        "//math:gradient",
+        "//systems/analysis:explicit_euler_integrator",
+        "//systems/analysis:integrator_base",
+        "//systems/framework",
+        "//systems/primitives:linear_system",
+    ],
+)
+
+drake_cc_library(
+    name = "kinematic_trajectory_optimization",
+    srcs = ["kinematic_trajectory_optimization.cc"],
+    hdrs = ["kinematic_trajectory_optimization.h"],
+    deps = [
+        "//common",
+        "//common/trajectories:bspline_trajectory",
+        "//math:bspline_basis",
+        "//math:gradient",
+        "//math:matrix_util",
+        "//multibody/plant",
+        "//solvers:mathematical_program",
+        "//solvers:mathematical_program_result",
+    ],
+)
+
+drake_cc_library(
+    name = "gcs_trajectory_optimization",
+    srcs = ["gcs_trajectory_optimization.cc"],
+    hdrs = ["gcs_trajectory_optimization.h"],
+    deps = [
+        "//common",
+        "//common/trajectories:bezier_curve",
+        "//common/trajectories:composite_trajectory",
+        "//common/trajectories:piecewise_trajectory",
+        "//geometry/optimization:geodesic_convexity",
+        "//geometry/optimization:graph_of_convex_sets",
+        "//multibody/plant",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_library(
+    name = "integration_constraint",
+    srcs = ["integration_constraint.cc"],
+    hdrs = ["integration_constraint.h"],
+    deps = [
+        "//solvers:constraint",
+    ],
+)
+
+# === test/ ===
+
+drake_cc_googletest(
+    name = "multiple_shooting_test",
+    deps = [
+        ":multiple_shooting",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//solvers:osqp_solver",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_googletest(
+    name = "direct_collocation_test",
+    deps = [
+        ":direct_collocation",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//examples/rimless_wheel",
+        "//multibody/benchmarks/pendulum",
+        "//solvers:solve",
+        "//systems/primitives:linear_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "direct_transcription_test",
+    timeout = "moderate",
+    data = ["//examples/pendulum:models"],
+    # This test has two duplicated long cases; run them in parallel.
+    shard_count = 4,
+    deps = [
+        ":direct_transcription",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//solvers:snopt_solver",
+        "//solvers:solve",
+        "//systems/primitives:symbolic_vector_system",
+        "//systems/primitives:trajectory_linear_system",
+        "//systems/primitives:zero_order_hold",
+    ],
+)
+
+drake_cc_googletest(
+    name = "gcs_trajectory_optimization_test",
+    shard_count = 12,
+    # Even with many shards, the SimpleEnv2D suite has a couple of test cases
+    # that routinely time out under coverage tests, all by themselves.
+    tags = ["no_kcov"],
+    deps = [
+        ":gcs_trajectory_optimization",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+        "//common/trajectories:piecewise_polynomial",
+        "//solvers:gurobi_solver",
+        "//solvers:mosek_solver",
+        "//solvers:snopt_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "kinematic_trajectory_optimization_test",
+    data = [
+        "//examples/multibody/cart_pole:models",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":kinematic_trajectory_optimization",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//multibody/benchmarks/pendulum",
+        "//multibody/parsing",
+        "//solvers:constraint",
+        "//solvers:ipopt_solver",
+        "//solvers:osqp_solver",
+        "//solvers:solve",
+        "//solvers/test_utilities:check_gradient_sparsity_pattern",
+    ],
+)
+
+drake_cc_googletest(
+    name = "sequential_expression_manager_test",
+    deps = [
+        ":sequential_expression_manager",
+        "//common/test_utilities:expect_throws_message",
+        "@fmt",
+    ],
+)
+
+drake_cc_googletest(
+    name = "integration_constraint_test",
+    deps = [
+        ":integration_constraint",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math:gradient",
+    ],
+)
+
+add_lint_tests()

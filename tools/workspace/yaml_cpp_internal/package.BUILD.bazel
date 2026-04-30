@@ -1,0 +1,47 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+load("@drake//tools/workspace:vendor_cxx.bzl", "cc_library_vendored")
+
+licenses(["notice"])  # MIT
+
+# The upstream headers that we'll use.
+_HDRS = glob([
+    "include/yaml-cpp/*.h",
+    "include/yaml-cpp/node/*.h",
+    "include/yaml-cpp/node/detail/*.h",
+], allow_empty = False)
+
+# The upstream sources that we'll use.
+_SRCS = [
+    "src/contrib/dragonbox.h",
+] + glob([
+    "src/*.cpp",
+    "src/*.h",
+], allow_empty = False)
+
+cc_library_vendored(
+    name = "yaml_cpp",
+    srcs = _SRCS,
+    srcs_vendored = [
+        x.replace("src/", "drake_src/")
+        for x in _SRCS
+    ],
+    hdrs = _HDRS,
+    hdrs_vendored = [
+        x.replace("include/yaml-cpp/", "drake_hdr/yaml-cpp/")
+        for x in _HDRS
+    ],
+    includes = ["drake_hdr"],
+    isystem = True,
+    linkstatic = 1,
+    visibility = ["//visibility:public"],
+)
+
+install(
+    name = "install",
+    docs = ["LICENSE"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["drake_repository_metadata.json"])

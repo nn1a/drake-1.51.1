@@ -1,0 +1,313 @@
+load("//bindings/pydrake:pydrake.bzl", "add_lint_tests_pydrake")
+load("//tools/install:install.bzl", "install")
+load(
+    "//tools/skylark:alias.bzl",
+    "drake_py_library_aliases",
+)
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+load(
+    "//tools/skylark:pybind.bzl",
+    "drake_pybind_library",
+    "get_drake_py_installs",
+    "get_pybind_package_info",
+)
+load(
+    "//tools/skylark:test_tags.bzl",
+    "gurobi_test_tags",
+    "mosek_test_tags",
+)
+
+package(default_visibility = [
+    "//bindings/pydrake:__subpackages__",
+])
+
+# This determines how `PYTHONPATH` is configured, and how to install the
+# bindings.
+# TODO(eric.cousineau): address
+# https://github.com/RobotLocomotion/drake/issues/12055
+PACKAGE_INFO = get_pybind_package_info("//bindings")
+
+drake_pybind_library(
+    name = "solvers",
+    cc_deps = [
+        "//bindings/generated_docstrings:solvers",
+        "//bindings/pydrake:autodiff_types_pybind",
+        "//bindings/pydrake:symbolic_types_pybind",
+        "//bindings/pydrake/common:cpp_param_pybind",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:eigen_pybind",
+        "//bindings/pydrake/common:serialize_pybind",
+        "//bindings/pydrake/common:value_pybind",
+    ],
+    cc_so_name = "__init__",
+    cc_srcs = [
+        "solvers_pybind.h",
+        "solvers_py.h",
+        "solvers_py.cc",
+        "solvers_py_augmented_lagrangian.cc",
+        "solvers_py_branch_and_bound.cc",
+        "solvers_py_clarabel.cc",
+        "solvers_py_clp.cc",
+        "solvers_py_csdp.cc",
+        "solvers_py_evaluators.cc",
+        "solvers_py_gurobi.cc",
+        "solvers_py_ids.cc",
+        "solvers_py_ipopt.cc",
+        "solvers_py_mathematicalprogram.cc",
+        "solvers_py_mixed_integer_optimization_util.cc",
+        "solvers_py_mixed_integer_rotation_constraint.cc",
+        "solvers_py_mobylcp.cc",
+        "solvers_py_mosek.cc",
+        "solvers_py_nlopt.cc",
+        "solvers_py_options.cc",
+        "solvers_py_osqp.cc",
+        "solvers_py_scs.cc",
+        "solvers_py_sdpa_free_format.cc",
+        "solvers_py_semidefinite_relaxation.cc",
+        "solvers_py_program_attribute.cc",
+        "solvers_py_snopt.cc",
+        "solvers_py_unrevised_lemke.cc",
+        "solvers_py_projected_gradient_descent.cc",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        "//bindings/pydrake:module_py",
+    ],
+    py_srcs = [
+        "_extra.py",
+    ],
+)
+
+install(
+    name = "install",
+    targets = [":solvers"],
+    py_dest = PACKAGE_INFO.py_dest,
+    deps = get_drake_py_installs([":solvers"]),
+)
+
+drake_py_unittest(
+    name = "augmented_lagrangian_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "clarabel_solver_test",
+    args = select({
+        "//tools/workspace/clarabel_cpp_internal:enabled": [],
+        "//conditions:default": ["TestClarabelSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "clp_solver_test",
+    args = select({
+        "//tools/workspace/clp_internal:enabled": [],
+        "//conditions:default": ["TestClpSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "csdp_solver_test",
+    args = select({
+        "//tools/workspace/csdp_internal:enabled": [],
+        "//conditions:default": ["TestCsdpSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "gurobi_solver_test",
+    tags = gurobi_test_tags(),
+    deps = [
+        ":solvers",
+    ],
+)
+
+drake_py_unittest(
+    name = "ipopt_solver_test",
+    args = select({
+        "//tools/workspace/ipopt_internal:enabled": [],
+        "//conditions:default": ["TestIpoptSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "mobylcp_solver_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "mosek_solver_test",
+    tags = mosek_test_tags(),
+    deps = [
+        ":solvers",
+    ],
+)
+
+drake_py_unittest(
+    name = "noscipy_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities/scipy_none",
+    ],
+)
+
+drake_py_unittest(
+    name = "nlopt_solver_test",
+    args = select({
+        "//tools/workspace/nlopt_internal:enabled": [],
+        "//conditions:default": ["TestNloptSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "osqp_solver_test",
+    args = select({
+        "//tools/workspace/osqp_internal:enabled": [],
+        "//conditions:default": ["TestOsqpSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+    ],
+)
+
+drake_py_unittest(
+    name = "scs_solver_test",
+    args = select({
+        "//tools/workspace/scs_internal:enabled": [],
+        "//conditions:default": ["TestScsSolver.unavailable"],
+    }),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "snopt_solver_test",
+    tags = ["snopt"],
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "unrevised_lemke_solver_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "mathematicalprogram_test",
+    tags = gurobi_test_tags(gurobi_required = False),
+    deps = [
+        ":solvers",
+        "//bindings/pydrake:forwarddiff_py",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "evaluators_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "branch_and_bound_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "mixed_integer_optimization_util_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "mixed_integer_rotation_constraint_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "sdpa_free_format_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "semidefinite_relaxation_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "program_attribute_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "projected_gradient_descent_solver_test",
+    deps = [
+        ":solvers",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+add_lint_tests_pydrake()

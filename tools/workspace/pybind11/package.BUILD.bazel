@@ -1,0 +1,113 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install", "install_files")
+load("@drake//tools/lint:python_lint.bzl", "python_lint")
+load("@drake//tools/skylark:cc.bzl", "cc_library")
+load(
+    "@drake//tools/workspace:check_lists_consistency.bzl",
+    "check_lists_consistency",
+)
+
+licenses(["notice"])  # BSD-3-Clause
+
+package(default_visibility = ["//visibility:public"])
+
+_HDRS = [
+    "include/pybind11/attr.h",
+    "include/pybind11/buffer_info.h",
+    "include/pybind11/cast.h",
+    "include/pybind11/chrono.h",
+    "include/pybind11/common.h",
+    "include/pybind11/complex.h",
+    "include/pybind11/detail/class.h",
+    "include/pybind11/detail/common.h",
+    "include/pybind11/detail/cpp_conduit.h",
+    "include/pybind11/detail/descr.h",
+    "include/pybind11/detail/exception_translation.h",
+    "include/pybind11/detail/init.h",
+    "include/pybind11/detail/internals.h",
+    "include/pybind11/detail/type_caster_base.h",
+    "include/pybind11/detail/typeid.h",
+    "include/pybind11/detail/value_and_holder.h",
+    "include/pybind11/eigen.h",
+    "include/pybind11/eigen/common.h",
+    "include/pybind11/eigen/matrix.h",
+    "include/pybind11/eigen/tensor.h",
+    "include/pybind11/embed.h",
+    "include/pybind11/eval.h",
+    "include/pybind11/functional.h",
+    "include/pybind11/gil.h",
+    "include/pybind11/gil_safe_call_once.h",
+    "include/pybind11/iostream.h",
+    "include/pybind11/numpy.h",
+    "include/pybind11/operators.h",
+    "include/pybind11/options.h",
+    "include/pybind11/pybind11.h",
+    "include/pybind11/pytypes.h",
+    "include/pybind11/stl.h",
+    "include/pybind11/stl/filesystem.h",
+    "include/pybind11/stl_bind.h",
+    "include/pybind11/type_caster_pyobject_ptr.h",
+    "include/pybind11/typing.h",
+]
+
+check_lists_consistency(
+    files = _HDRS,
+    glob_include = [
+        "include/**/*.h",
+    ],
+)
+
+cc_library(
+    name = "pybind11",
+    hdrs = _HDRS,
+    includes = ["include"],
+    isystem = True,
+    deps = [
+        "@eigen",
+        "@drake//tools/workspace/python:cc_headers",
+        "@drake//tools/workspace/python:cc_libs",
+    ],
+)
+
+CMAKE_PACKAGE = "pybind11"
+
+install_files(
+    name = "install_cmake_config",
+    dest = "lib/cmake/{}".format(CMAKE_PACKAGE),
+    files = [
+        "@drake//tools/workspace/pybind11:{}-config.cmake".format(CMAKE_PACKAGE),  # noqa
+        "@drake//tools/workspace/pybind11:{}-config-version.cmake".format(CMAKE_PACKAGE),  # noqa
+    ],
+    strip_prefix = ["**/"],
+    allowed_externals = ["@drake//:.bazelproject"],
+    visibility = ["//visibility:private"],
+)
+
+install_files(
+    name = "install_extra_cmake",
+    dest = "lib/cmake/pybind11",
+    files = [
+        # N.B. We explicitly exclude pybind11Common.cmake because Drake's
+        # `pybind11-config.cmake` covers its functionality.
+        "tools/pybind11NewTools.cmake",
+    ],
+    strip_prefix = ["**/"],
+)
+
+install(
+    name = "install",
+    targets = [":pybind11"],
+    hdr_dest = "include/pybind11",
+    hdr_strip_prefix = ["include"],
+    guess_hdrs = "PACKAGE",
+    docs = ["LICENSE"],
+    deps = [
+        ":install_cmake_config",
+        ":install_extra_cmake",
+    ],
+)
+
+python_lint()
+
+exports_files(["drake_repository_metadata.json"])

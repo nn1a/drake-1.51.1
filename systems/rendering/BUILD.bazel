@@ -1,0 +1,42 @@
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_googletest",
+    "drake_cc_library",
+    "drake_cc_package_library",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+drake_cc_package_library(
+    name = "rendering",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":multibody_position_to_geometry_pose",
+    ],
+)
+
+drake_cc_library(
+    name = "multibody_position_to_geometry_pose",
+    srcs = ["multibody_position_to_geometry_pose.cc"],
+    hdrs = ["multibody_position_to_geometry_pose.h"],
+    deps = [
+        "//common:pointer_cast",
+        "//geometry:kinematics_vector",
+        "//multibody/plant",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_googletest(
+    name = "multibody_position_to_geometry_pose_test",
+    data = ["@drake_models//:iiwa_description"],
+    deps = [
+        ":multibody_position_to_geometry_pose",
+        "//common/test_utilities",
+        "//multibody/parsing",
+        "//systems/framework/test_utilities",
+    ],
+)
+
+add_lint_tests()

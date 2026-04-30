@@ -1,0 +1,630 @@
+load("//bindings/pydrake:pydrake.bzl", "add_lint_tests_pydrake")
+load("//tools/install:install.bzl", "install")
+load("//tools/jupyter:jupyter_py.bzl", "drake_jupyter_py_binary")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_library",
+)
+load(
+    "//tools/skylark:drake_py.bzl",
+    "drake_py_binary",
+    "drake_py_library",
+    "drake_py_unittest",
+)
+load(
+    "//tools/skylark:pybind.bzl",
+    "drake_pybind_library",
+    "get_drake_py_installs",
+    "get_pybind_package_info",
+)
+load("//tools/skylark:test_tags.bzl", "vtk_test_tags")
+
+package(default_visibility = [
+    "//bindings/pydrake:__subpackages__",
+])
+
+# This determines how `PYTHONPATH` is configured, and how to install the
+# bindings.
+PACKAGE_INFO = get_pybind_package_info(base_package = "//bindings")
+
+# @note Symbols are NOT imported directly into
+# `__init__.py` to simplify dependency management, meaning that
+# classes are organized by their directory structure rather than
+# by C++ namespace. If you want all symbols, use `all.py`.
+drake_py_library(
+    name = "module_py",
+    srcs = ["__init__.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [
+        "//bindings/pydrake:module_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "framework_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_framework",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:eigen_pybind",
+        "//bindings/pydrake/common:ref_cycle_pybind",
+        "//bindings/pydrake/common:type_safe_index_pybind",
+        "//bindings/pydrake/common:value_pybind",
+        "//bindings/pydrake/common:wrap_pybind",
+        "//bindings/pydrake/systems:builder_life_support_pybind",
+    ],
+    cc_srcs = [
+        "framework_py.cc",
+        "framework_py_semantics.cc",
+        "framework_py_semantics.h",
+        "framework_py_systems.cc",
+        "framework_py_systems.h",
+        "framework_py_values.cc",
+        "framework_py_values.h",
+        "value_producer_pybind.cc",
+        "value_producer_pybind.h",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":module_py",
+    ],
+)
+
+drake_py_library(
+    name = "scalar_conversion_py",
+    srcs = ["scalar_conversion.py"],
+    deps = [
+        ":framework_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "primitives_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_primitives",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:eigen_pybind",
+        "//bindings/pydrake/common:serialize_pybind",
+    ],
+    cc_srcs = ["primitives_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":module_py",
+        "//bindings/pydrake:trajectories_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "analysis_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_analysis",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:deprecation_pybind",
+        "//bindings/pydrake/common:serialize_pybind",
+        "//bindings/pydrake/common:wrap_pybind",
+        "//systems/analysis:simulator_python_internal_header",
+    ],
+    cc_srcs = ["analysis_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":module_py",
+        ":primitives_py",
+        "//bindings/pydrake:trajectories_py",
+        "//bindings/pydrake/solvers",
+    ],
+)
+
+drake_pybind_library(
+    name = "controllers_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_controllers",
+        "//bindings/pydrake:symbolic_types_pybind",
+        "//bindings/pydrake/common:ref_cycle_pybind",
+        "//bindings/pydrake/common:wrap_pybind",
+    ],
+    cc_srcs = ["controllers_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":module_py",
+        ":primitives_py",
+        "//bindings/pydrake/multibody:plant_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "estimators_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_estimators",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:wrap_pybind",
+    ],
+    cc_srcs = ["estimators_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":module_py",
+        ":primitives_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "rendering_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_rendering",
+        "//bindings/pydrake/common:deprecation_pybind",
+        "//bindings/pydrake/common:value_pybind",
+    ],
+    cc_srcs = ["rendering_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":module_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "sensors_py",
+    cc_deps = [
+        "//bindings/generated_docstrings:systems_sensors",
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:deprecation_pybind",
+        "//bindings/pydrake/common:eigen_pybind",
+        "//bindings/pydrake/common:ref_cycle_pybind",
+        "//bindings/pydrake/common:serialize_pybind",
+        "//bindings/pydrake/common:type_pack",
+        "//bindings/pydrake/common:value_pybind",
+    ],
+    cc_srcs = [
+        "sensors_py.h",
+        "sensors_py.cc",
+        "sensors_py_accelerometer.cc",
+        "sensors_py_camera_config.cc",
+        "sensors_py_gyroscope.cc",
+        "sensors_py_image.cc",
+        "sensors_py_image_io.cc",
+        "sensors_py_lcm.cc",
+        "sensors_py_rgbd.cc",
+        "sensors_py_rotary_encoders.cc",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":lcm_py",
+        ":module_py",
+        "//bindings/pydrake/geometry",
+        "//bindings/pydrake/multibody:plant_py",
+    ],
+)
+
+# TODO(eric.cousineau): Put this under test once `pydot` is in
+# `install_prereqs.sh`.
+drake_py_library(
+    name = "drawing_py",
+    srcs = ["drawing.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [":module_py"],
+)
+
+drake_cc_library(
+    name = "builder_life_support_pybind",
+    hdrs = ["builder_life_support_pybind.h"],
+    declare_installed_headers = False,
+    visibility = ["//bindings/pydrake:__subpackages__"],
+    deps = [],
+)
+
+drake_cc_library(
+    name = "lcm_pybind",
+    hdrs = ["lcm_pybind.h"],
+    declare_installed_headers = 0,
+    visibility = ["//visibility:public"],
+    deps = [
+        "//bindings/pydrake:pydrake_pybind",
+        "//bindings/pydrake/common:cpp_template_pybind",
+    ],
+)
+
+drake_pybind_library(
+    name = "lcm_py",
+    cc_deps = [
+        ":lcm_pybind",
+        "//bindings/generated_docstrings:lcm",
+        "//bindings/generated_docstrings:systems_lcm",
+    ],
+    cc_srcs = [
+        "lcm_py.cc",
+        "lcm_py_bind_cpp_serializers.cc",
+        "lcm_py_bind_cpp_serializers.h",
+    ],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":module_py",
+        "//bindings/pydrake:lcm_py",
+    ],
+    py_srcs = ["_lcm_extra.py"],
+)
+
+drake_py_unittest(
+    name = "lcm_test",
+    # See #19394, this test fails frequently on Mac ARM CI
+    flaky = True,
+    deps = [
+        ":analysis_py",
+        ":lcm_py",
+        ":primitives_py",
+    ],
+)
+
+drake_py_library(
+    name = "jupyter_widgets_py",
+    srcs = ["jupyter_widgets.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [
+        ":framework_py",
+        ":module_py",
+    ],
+)
+
+drake_py_library(
+    name = "perception_py",
+    srcs = ["perception.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [
+        ":framework_py",
+        ":module_py",
+        "//bindings/pydrake:perception_py",
+    ],
+)
+
+drake_py_library(
+    name = "planar_scenegraph_visualizer_py",
+    srcs = ["planar_scenegraph_visualizer.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [
+        ":framework_py",
+        ":module_py",
+        ":pyplot_visualizer_py",
+        ":rendering_py",
+        "//bindings/pydrake:lcm_py",
+        "@rules_python//python/runfiles",
+    ],
+)
+
+drake_py_library(
+    name = "pyplot_visualizer_py",
+    srcs = ["pyplot_visualizer.py"],
+    imports = PACKAGE_INFO.py_imports,
+    deps = [
+        ":_resample_interp1d_py",
+        ":framework_py",
+        ":module_py",
+        ":primitives_py",
+        "//bindings/pydrake:trajectories_py",
+    ],
+)
+
+drake_py_library(
+    name = "_resample_interp1d_py",
+    srcs = ["_resample_interp1d.py"],
+    imports = PACKAGE_INFO.py_imports,
+)
+
+PY_LIBRARIES_WITH_INSTALL = [
+    ":analysis_py",
+    ":controllers_py",
+    ":estimators_py",
+    ":framework_py",
+    ":lcm_py",
+    ":primitives_py",
+    ":rendering_py",
+    ":sensors_py",
+]
+
+PY_LIBRARIES = [
+    ":_resample_interp1d_py",
+    ":drawing_py",
+    ":jupyter_widgets_py",
+    ":scalar_conversion_py",
+    ":module_py",
+    ":perception_py",
+    ":planar_scenegraph_visualizer_py",
+    ":pyplot_visualizer_py",
+]
+
+# Symbol roll-up (for user ease).
+drake_py_library(
+    name = "all_py",
+    srcs = ["all.py"],
+    deps = PY_LIBRARIES_WITH_INSTALL + PY_LIBRARIES,
+)
+
+# Package roll-up (for Bazel dependencies).
+drake_py_library(
+    name = "systems",
+    deps = [":all_py"],
+)
+
+install(
+    name = "install",
+    targets = PY_LIBRARIES + [":all_py"],
+    py_dest = PACKAGE_INFO.py_dest,
+    deps = get_drake_py_installs(PY_LIBRARIES_WITH_INSTALL),
+)
+
+drake_py_unittest(
+    name = "general_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":test_util_py",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/examples",
+        "//bindings/pydrake/systems/test_utilities:framework_test_util_py",
+    ],
+)
+
+drake_py_binary(
+    name = "drawing_graphviz_example",
+    srcs = ["drawing_graphviz_example.py"],
+    add_test_rule = 1,
+    data = [
+        "//examples/multibody/cart_pole:models",
+    ],
+    test_rule_timeout = "moderate",
+    deps = [
+        ":drawing_py",
+        ":framework_py",
+        ":primitives_py",
+        "//bindings/pydrake:lcm_py",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+        "//bindings/pydrake/visualization",
+    ],
+)
+
+drake_jupyter_py_binary(
+    name = "jupyter_widgets_examples",
+    add_test_rule = 1,
+    data = [
+        "@drake_models//:ycb",
+    ],
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":jupyter_widgets_py",
+        "//bindings/pydrake/geometry",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+    ],
+)
+
+drake_pybind_library(
+    name = "test_util_py",
+    testonly = 1,
+    add_install = False,
+    cc_deps = [
+        "//bindings/pydrake/common:cpp_template_pybind",
+        "//bindings/pydrake/common:default_scalars_pybind",
+        "//bindings/pydrake/common:value_pybind",
+        "//bindings/pydrake/systems:builder_life_support_pybind",
+    ],
+    cc_so_name = "test/test_util",
+    cc_srcs = ["test/test_util_py.cc"],
+    package_info = PACKAGE_INFO,
+    py_deps = [
+        ":framework_py",
+        ":primitives_py",
+    ],
+    visibility = ["//bindings/pydrake:__subpackages__"],
+)
+
+drake_py_unittest(
+    name = "analysis_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":test_util_py",
+        "//bindings/pydrake:trajectories_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "builder_life_support_test",
+    # Somehow kcov and pybind11 objects interact to spoil reference counting
+    # heuristics. In any case, kcov can't really introspect mixed-language
+    # programs.
+    tags = ["no_kcov"],
+    deps = [
+        ":test_util_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "controllers_test",
+    data = [
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":controllers_py",
+        ":test_util_py",
+        "//bindings/pydrake/examples",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+        "//bindings/pydrake/multibody:tree_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "custom_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":test_util_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "estimators_test",
+    deps = [
+        ":estimators_py",
+        ":primitives_py",
+        "//bindings/pydrake/examples",
+    ],
+)
+
+drake_py_unittest(
+    name = "event_gc_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "lifetime_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":test_util_py",
+    ],
+)
+
+drake_jupyter_py_binary(
+    name = "test/lifetime_test_notebook",
+    testonly = True,
+    add_test_rule = 1,
+    deps = [
+        ":framework_py",
+        ":primitives_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "monte_carlo_test",
+    deps = [
+        ":analysis_py",
+        ":primitives_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+drake_py_unittest(
+    name = "perception_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":perception_py",
+        "//bindings/pydrake:perception_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "primitives_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":test_util_py",
+        "//bindings/pydrake:trajectories_py",
+        "//bindings/pydrake/common/test_utilities:deprecation_py",
+        "//bindings/pydrake/common/test_utilities:numpy_compare_py",
+        "//bindings/pydrake/common/test_utilities/scipy_stub",
+    ],
+)
+
+drake_py_unittest(
+    name = "planar_scenegraph_visualizer_test",
+    data = [
+        "//examples/multibody/cart_pole:models",
+        "//geometry:test_obj_files",
+        "@drake_models//:iiwa_description",
+    ],
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":planar_scenegraph_visualizer_py",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/geometry",
+        "//bindings/pydrake/multibody",
+    ],
+)
+
+drake_py_unittest(
+    name = "pyplot_visualizer_test",
+    deps = [
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+        ":pyplot_visualizer_py",
+        "//bindings/pydrake:trajectories_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "_resample_log_interp1d_test",
+    deps = [
+        ":_resample_interp1d_py",
+        ":analysis_py",
+        ":framework_py",
+        ":primitives_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "rendering_test",
+    data = ["//multibody/benchmarks/acrobot:models"],
+    deps = [
+        ":rendering_py",
+        "//bindings/pydrake/multibody:math_py",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "scalar_conversion_test",
+    deps = [
+        ":framework_py",
+        ":scalar_conversion_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "sensors_test",
+    data = [
+        "//multibody:models",
+    ],
+    tags = vtk_test_tags(),
+    deps = [
+        ":sensors_py",
+        "//bindings/pydrake/common/test_utilities",
+        "//bindings/pydrake/geometry",
+        "//bindings/pydrake/multibody:parsing_py",
+        "//bindings/pydrake/multibody:plant_py",
+    ],
+)
+
+drake_py_unittest(
+    name = "value_test",
+    deps = [
+        ":framework_py",
+        "//bindings/pydrake/common/test_utilities",
+    ],
+)
+
+add_lint_tests_pydrake()

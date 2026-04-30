@@ -1,0 +1,24 @@
+# -*- bazel -*-
+
+load("@drake//tools/install:install.bzl", "install")
+load("@drake//tools/skylark:cc.bzl", "cc_library")
+
+licenses(["notice"])  # MIT
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "stduuid",
+    hdrs = ["include/uuid.h"],
+    strip_include_prefix = "include",
+    isystem = True,
+    linkstatic = 1,
+)
+
+# Install the license file.
+install(
+    name = "install",
+    docs = ["LICENSE"],
+)
+
+exports_files(["drake_repository_metadata.json"])
