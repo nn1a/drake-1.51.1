@@ -1,0 +1,72 @@
+Source: drake
+Section: libdevel
+Priority: optional
+Maintainer: Drake Development Team <drake-users@mit.edu>
+Build-Depends:
+ debhelper-compat (= 13),
+ ca-certificates,
+ cmake (>= 3.22),
+ gfortran,
+ git,
+ libblas-dev,
+ libclang-19-dev | libclang-15-dev,
+ libeigen3-dev,
+ libfmt-dev,
+ libgl-dev,
+ libglib2.0-dev,
+ libglx-dev,
+ liblapack-dev,
+ libopengl-dev,
+ libspdlog-dev,
+ locales,
+ lsb-release,
+ ocl-icd-opencl-dev,
+ opencl-headers,
+ patch,
+ pkg-config,
+ python-is-python3,
+ python3,
+ python3-all-dev,
+ python3-matplotlib,
+ python3-numpy,
+ python3-yaml,
+ wget,
+ zlib1g-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://drake.mit.edu/
+Vcs-Browser: https://github.com/RobotLocomotion/drake
+Vcs-Git: https://github.com/RobotLocomotion/drake.git
+
+Package: drake-dev
+Architecture: amd64 arm64
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ jupyter-notebook,
+ libblas-dev,
+ libegl1,
+ libeigen3-dev,
+ libgfortran5,
+ libglib2.0-0 | libglib2.0-0t64,
+ libglx0,
+ libgomp1,
+ liblapack3,
+ libopengl0,
+ libpython3.12 | libpython3.10,
+ libspdlog-dev,
+ libx11-6,
+ ocl-icd-libopencl1,
+ python3,
+ python3-ipywidgets,
+ python3-matplotlib,
+ python3-munkres,
+ python3-numpy,
+ python3-pil,
+ python3-pydot,
+ python3-yaml,
+ zlib1g
+Description: Model-based design and verification for robotics
+ Drake is a collection of tools for analyzing the dynamics of robots and
+ building control systems for them in C++ and Python, with a heavy emphasis
+ on optimization-based design and analysis.

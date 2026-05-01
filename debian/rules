@@ -1,0 +1,141 @@
+#!/usr/bin/make -f
+
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export PYTHONNOUSERSITE=1
+
+ifneq ($(DRAKE_DEB_BUILD_HOME),)
+export HOME := $(DRAKE_DEB_BUILD_HOME)
+export XDG_CACHE_HOME := $(HOME)/.cache
+endif
+ifeq ($(XDG_CACHE_HOME),)
+export XDG_CACHE_HOME := $(HOME)/.cache
+endif
+
+DEB_VERSION_UPSTREAM := $(shell dpkg-parsechangelog -S Version | sed 's/-[^-]*$$//')
+DRAKE_GIT_SHA := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+
+%:
+	dh $@ --buildsystem=cmake
+
+.PHONY: patch-bazel-cache
+patch-bazel-cache:
+ifneq ($(DRAKE_DEB_BAZEL_OUTPUT_BASE),)
+	mkdir -p "$(DRAKE_DEB_BAZEL_OUTPUT_BASE)" \
+		"$(DRAKE_DEB_BAZEL_REPOSITORY_CACHE)" \
+		"$(DRAKE_DEB_BAZEL_DISK_CACHE)"
+	set -e; \
+	qemu_workarounds=0; \
+	case "$${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS:-auto}" in \
+		1|yes|true) \
+			qemu_workarounds=1; \
+			;; \
+		0|no|false) \
+			qemu_workarounds=0; \
+			;; \
+		auto|"") \
+			if [ -n "$${DRAKE_DEB_HOST_ARCH:-}" ] && \
+					[ -n "$${DRAKE_DEB_ARCH:-}" ] && \
+					[ "$${DRAKE_DEB_HOST_ARCH}" != "$${DRAKE_DEB_ARCH}" ]; then \
+				qemu_workarounds=1; \
+			fi; \
+			;; \
+		*) \
+			echo "Unknown DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS=$${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS}" >&2; \
+			exit 2; \
+			;; \
+	esac; \
+	bazel_batch=0; \
+	case "$${DRAKE_DEB_BAZEL_BATCH:-auto}" in \
+		1|yes|true) \
+			bazel_batch=1; \
+			;; \
+		0|no|false) \
+			bazel_batch=0; \
+			;; \
+		auto|"") \
+			bazel_batch="$${qemu_workarounds}"; \
+			;; \
+		*) \
+			echo "Unknown DRAKE_DEB_BAZEL_BATCH=$${DRAKE_DEB_BAZEL_BATCH}" >&2; \
+			exit 2; \
+			;; \
+	esac; \
+	for rc in obj-*/drake_build_cwd/.bazelrc; do \
+		[ -e "$$rc" ] || continue; \
+		sed -i 's|^startup --output_base=.*|startup --output_base="$(DRAKE_DEB_BAZEL_OUTPUT_BASE)"|' "$$rc"; \
+		if [ "$${bazel_batch}" = 1 ]; then \
+			if ! grep -qx 'startup --batch' "$$rc"; then \
+				printf '%s\n' 'startup --batch' >> "$$rc"; \
+			fi; \
+		else \
+			sed -i '/^startup --batch$$/d' "$$rc"; \
+		fi; \
+		if grep -q '^build --repository_cache=' "$$rc"; then \
+			sed -i 's|^build --repository_cache=.*|build --repository_cache="$(DRAKE_DEB_BAZEL_REPOSITORY_CACHE)"|' "$$rc"; \
+		else \
+			printf '%s\n' 'build --repository_cache="$(DRAKE_DEB_BAZEL_REPOSITORY_CACHE)"' >> "$$rc"; \
+		fi; \
+		if grep -q '^build --disk_cache=' "$$rc"; then \
+			sed -i 's|^build --disk_cache=.*|build --disk_cache="$(DRAKE_DEB_BAZEL_DISK_CACHE)"|' "$$rc"; \
+		else \
+			printf '%s\n' 'build --disk_cache="$(DRAKE_DEB_BAZEL_DISK_CACHE)"' >> "$$rc"; \
+		fi; \
+		if [ -n "$${PSEUDO_NATIVE_HOST_TOOL_LIST:-}" ] || \
+				{ [ "$${PSEUDO_NATIVE_HOST_TOOLS:-0}" != 0 ] && \
+				  [ "$${PSEUDO_NATIVE_HOST_TOOLS:-0}" != no ] && \
+				  [ "$${PSEUDO_NATIVE_HOST_TOOLS:-0}" != false ]; }; then \
+			for flag in \
+				'build --action_env=PATH=/usr/local/bin:/usr/bin:/bin' \
+				'build --host_action_env=PATH=/usr/local/bin:/usr/bin:/bin' \
+				'build --repo_env=PATH=/usr/local/bin:/usr/bin:/bin'; do \
+				key=$$(printf '%s\n' "$$flag" | sed 's|=.*|=|'); \
+				if grep -q "^$${key}" "$$rc"; then \
+					sed -i "s|^$${key}.*|$$flag|" "$$rc"; \
+				else \
+					printf '%s\n' "$$flag" >> "$$rc"; \
+				fi; \
+			done; \
+		fi; \
+		if [ "$${qemu_workarounds}" = 1 ]; then \
+			for flag in \
+				'build --loading_phase_threads=1' \
+				'build --noexperimental_merged_skyframe_analysis_execution' \
+				'build --noremote_cache_async' \
+				'build --noremote_upload_local_results' \
+				'build --noexperimental_collect_worker_data_in_profiler' \
+				'build --nogenerate_json_trace_profile'; do \
+				if ! grep -qx "$$flag" "$$rc"; then \
+					printf '%s\n' "$$flag" >> "$$rc"; \
+				fi; \
+			done; \
+		else \
+			for flag in \
+				'build --loading_phase_threads=1' \
+				'build --noexperimental_merged_skyframe_analysis_execution' \
+				'build --noremote_cache_async' \
+				'build --noremote_upload_local_results' \
+				'build --noexperimental_collect_worker_data_in_profiler' \
+				'build --nogenerate_json_trace_profile'; do \
+				sed -i "\|^$${flag}$$|d" "$$rc"; \
+			done; \
+		fi; \
+	done
+endif
+
+override_dh_auto_configure:
+	mkdir -p "$(HOME)" "$(XDG_CACHE_HOME)"
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=/opt/drake \
+		-DDRAKE_VERSION_OVERRIDE=$(DEB_VERSION_UPSTREAM) \
+		-DDRAKE_GIT_SHA_OVERRIDE=$(DRAKE_GIT_SHA) \
+		-DWITH_OPENMP=ON
+	$(MAKE) -f debian/rules patch-bazel-cache
+
+override_dh_auto_build:
+	$(MAKE) -f debian/rules patch-bazel-cache
+	dh_auto_build
+
+override_dh_shlibdeps:
+	dh_shlibdeps -- -l$(CURDIR)/debian/drake-dev/opt/drake/lib

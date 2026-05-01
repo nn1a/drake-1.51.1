@@ -1,0 +1,5 @@
+drake (1.51.1) unstable; urgency=medium
+
+  * Package Drake from the local source tree.
+
+ -- Drake Development Team <drake-users@mit.edu>  Thu, 30 Apr 2026 21:12:59 +0900

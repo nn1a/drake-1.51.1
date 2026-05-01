@@ -8,7 +8,8 @@ import subprocess
 import sys
 import tempfile
 
-from mypy import stubgen
+from mypy.stubgenc import generate_stub_for_c_module
+from mypy.stubutil import generate_guarded
 
 
 def _pydrake_modules():
@@ -75,6 +76,36 @@ def _copy_pyi(pyi_generated, output_root, pyi_outputs):
         shutil.copyfile(pyi, output_root / pyi)
 
 
+def _pyi_target(module_name, all_module_names):
+    """Returns the relative *.pyi path that mypy.stubgen would use for a
+    native module.
+    """
+    module_as_path = module_name.replace(".", "/")
+    if any(name.startswith(module_name + ".") for name in all_module_names):
+        return Path(module_as_path) / "__init__.pyi"
+    return Path(module_as_path + ".pyi")
+
+
+def _generate_native_module_stubs(native_modules):
+    """Generates stubs for native modules already discovered by Drake.
+
+    This intentionally skips mypy.stubgen's import-based target collection.
+    Under qemu-user arm64 builds, that collection can time out while importing
+    Drake extension modules in mypy.moduleinspect's subprocess.
+    """
+    all_module_names = sorted(native_modules)
+    for module_name in all_module_names:
+        target = _pyi_target(module_name, all_module_names)
+        with generate_guarded(
+            module_name, str(target), ignore_errors=False, verbose=False
+        ):
+            generate_stub_for_c_module(
+                module_name,
+                str(target),
+                known_modules=all_module_names,
+            )
+
+
 def _actual_main():
     # Our arguments are the list of *.pyi outputs wanted from stubgen.bzl
     # (which currently come from the `PYI_FILES = ...` defined in BUILD.bazel).
@@ -102,9 +133,7 @@ def _actual_main():
     # it from a safe place.
     with tempfile.TemporaryDirectory(prefix="drake_stubgen_") as temp:
         os.chdir(temp)
-        args = ["--output=."] + [f"--module={name}" for name in native_modules]
-        returncode = stubgen.main(args=args) or 0
-        assert returncode == 0, returncode
+        _generate_native_module_stubs(native_modules)
 
         # The generation was successful. Copy the *.pyi files to output.
         pyi_generated = _pyi_generated(Path(temp))
