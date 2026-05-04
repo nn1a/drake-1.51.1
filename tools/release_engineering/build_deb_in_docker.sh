@@ -39,6 +39,8 @@ Environment:
                                  (default: auto)
   DRAKE_DEB_BAZEL_BATCH          Add startup --batch to generated .bazelrc
                                  (default: auto; follows qemu workarounds)
+  DRAKE_DEB_BAZEL_JOBS           Optional Bazel --jobs value for memory-bound
+                                 builds
   PSEUDO_NATIVE_TOOLCHAIN
                                  Use an amd64-hosted cross compiler bundle for
                                  emulated arm64 builds (default: 0; use auto to
@@ -56,12 +58,15 @@ Environment:
                                  the volume (default: 1 when image is set)
   PSEUDO_NATIVE_HOST_TOOLS       Activate optional amd64 host tools from the
                                  pseudo-native bundle. Values: 0, compression,
-                                 core-search, core-text, core, debug, shell,
-                                 all, 1
+                                 core-search, core-text, core, debug,
+                                 packaging, shell, all, 1
                                  (default: all; all includes shell;
                                  1 means compression)
   PSEUDO_NATIVE_HOST_TOOL_LIST   Explicit whitespace/comma separated host tool
                                  list to bundle and activate.
+  PSEUDO_NATIVE_BAZEL            Download and run the amd64 Bazel binary via
+                                 Bazelisk in pseudo-native arm64 builds.
+                                 Values: 0, 1, auto (default: 0)
 EOF
 }
 
@@ -213,6 +218,7 @@ run_build() {
   local pseudo_native_image pseudo_native_volume pseudo_native_pull
   local pseudo_native_root_in_container=/opt/pseudo-native-toolchain
   local pseudo_native_host_tools=0
+  local pseudo_native_bazel=0
   local pseudo_native_volume_probe
   local pseudo_native_args=()
   local pseudo_native_host_tool_mount_args=()
@@ -253,6 +259,29 @@ run_build() {
       exit 2
       ;;
   esac
+
+  case "${PSEUDO_NATIVE_BAZEL:-0}" in
+    auto)
+      if [[ "${pseudo_native}" -eq 1 ]]; then
+        pseudo_native_bazel=1
+      fi
+      ;;
+    1|yes|true)
+      pseudo_native_bazel=1
+      ;;
+    0|no|false|"")
+      pseudo_native_bazel=0
+      ;;
+    *)
+      echo "Unknown PSEUDO_NATIVE_BAZEL=${PSEUDO_NATIVE_BAZEL}" >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ "${pseudo_native_bazel}" -eq 1 && "${pseudo_native}" -ne 1 ]]; then
+    echo "PSEUDO_NATIVE_BAZEL requires PSEUDO_NATIVE_TOOLCHAIN" >&2
+    exit 2
+  fi
 
   if [[ "${pseudo_native}" -eq 1 ]]; then
     if pseudo_native_host_tools_requested; then
@@ -417,9 +446,11 @@ run_build() {
         exit 2
         ;;
     esac
+    pseudo_native_args+=(--env PSEUDO_NATIVE_BAZEL="${pseudo_native_bazel}")
   else
     pseudo_native_args=(
       --env PSEUDO_NATIVE_TOOLCHAIN=0
+      --env PSEUDO_NATIVE_BAZEL=0
     )
   fi
 
@@ -464,6 +495,7 @@ run_build() {
     --env DRAKE_DEB_REUSE_BUILD_TREE="${DRAKE_DEB_REUSE_BUILD_TREE:-1}" \
     --env DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS="${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS:-auto}" \
     --env DRAKE_DEB_BAZEL_BATCH="${DRAKE_DEB_BAZEL_BATCH:-auto}" \
+    --env DRAKE_DEB_BAZEL_JOBS="${DRAKE_DEB_BAZEL_JOBS:-}" \
     --env DRAKE_DEB_BAZEL_OUTPUT_BASE="/home/builder/.cache/bazel/output-base" \
     --env DRAKE_DEB_BAZEL_REPOSITORY_CACHE="/home/builder/.cache/bazel/repository-cache" \
     --env DRAKE_DEB_BAZEL_DISK_CACHE="/home/builder/.cache/bazel/disk-cache" \

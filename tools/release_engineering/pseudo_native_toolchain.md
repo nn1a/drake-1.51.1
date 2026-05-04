@@ -317,6 +317,12 @@ flowchart TD
   - `dh_dwz` 단계에서 debug info를 줄이는 작업을 amd64 native로 실행한다.
   - `dwz`는 target binary를 실행하지 않고 ELF/DWARF를 읽고 다시 쓰므로
     architecture replacement 위험이 비교적 낮다.
+- `packaging` group:
+  - `dpkg-deb`
+  - `dh_builddeb` 단계에서 `.deb` archive와 `data.tar.zst`를 만드는 작업을
+    amd64 native로 실행한다.
+  - `dpkg-deb`는 package control file의 `Architecture` 값을 보존하고 target
+    binary를 실행하지 않으므로 arm64 산출물 ABI를 바꾸지 않는다.
 - `shell` group:
   - `bash`
   - `dash`
@@ -329,6 +335,7 @@ flowchart TD
   - `compression`
   - `core`
   - `debug`
+  - `packaging`
   - `shell`
 - `1`:
   - `compression` alias
@@ -342,7 +349,7 @@ flowchart TD
   - `java`
   - `bazel`
   - `cmake`
-  - `dpkg-*`
+  - `dpkg-*`, 단 `dpkg-deb`는 `packaging` group에서 지원한다.
   - `debhelper`
 - 제외 이유:
   - target rootfs, module path, package metadata, maintainer script ABI와 강하게
@@ -427,6 +434,13 @@ PSEUDO_NATIVE_HOST_TOOLS=compression,debug \
 
 ```bash
 PSEUDO_NATIVE_HOST_TOOLS=compression,core-search \
+  ./tools/release_engineering/prepare_pseudo_native_toolchain.sh noble arm64
+```
+
+- packaging host tool 포함:
+
+```bash
+PSEUDO_NATIVE_HOST_TOOLS=packaging \
   ./tools/release_engineering/prepare_pseudo_native_toolchain.sh noble arm64
 ```
 
@@ -596,9 +610,21 @@ gcc-nm /tmp/liblto.a
 
 - 기본 pseudo-native arm64 build:
   - 기본으로 `PSEUDO_NATIVE_HOST_TOOLS=all`이 적용된다.
+  - Bazel 자체는 기본값으로 arm64 binary를 사용한다.
 
 ```bash
 PSEUDO_NATIVE_TOOLCHAIN=1 \
+  ./tools/release_engineering/build_deb_in_docker.sh noble arm64
+```
+
+- Bazel도 amd64 binary로 실행하는 실험적 build:
+  - Bazelisk가 `bazel-*-linux-x86_64`를 다운로드하도록 강제한다.
+  - Bazel JVM에는 `-Dos.arch=aarch64`를 추가해서 Bazel의 default host/target
+    platform 판단은 arm64로 유지한다.
+
+```bash
+PSEUDO_NATIVE_TOOLCHAIN=1 \
+PSEUDO_NATIVE_BAZEL=1 \
   ./tools/release_engineering/build_deb_in_docker.sh noble arm64
 ```
 
@@ -658,6 +684,15 @@ PSEUDO_NATIVE_TOOLCHAIN=auto \
   - 두 조건이 모두 맞으면 pseudo-native mode를 켠다.
   - arm64 host에서 arm64 build를 하면 qemu가 아니므로 자동으로 켜지지 않는다.
 
+- pseudo-native Bazel auto mode:
+  - `PSEUDO_NATIVE_BAZEL=auto`는 pseudo-native mode가 켜진 arm64 build에서
+    amd64 Bazel binary 사용을 켠다.
+  - 기본값은 `0`이다. compiler/binutils 경로보다 Bazel startup/platform 판단에
+    더 직접적으로 영향을 주므로 명시적으로 켜서 사용한다.
+  - `DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS=auto`인 경우에는 qemu용 Bazel workaround와
+    `--batch`도 자동으로 끈다. Bazel server와 JVM이 amd64 native로 실행되기
+    때문에 qemu-user 회피 옵션을 유지할 필요가 없다.
+
 - compiler/binutils만 사용하는 보수적 build:
 
 ```bash
@@ -679,6 +714,14 @@ PSEUDO_NATIVE_HOST_TOOLS=compression,debug \
 ```bash
 PSEUDO_NATIVE_TOOLCHAIN=1 \
 PSEUDO_NATIVE_HOST_TOOLS=compression,core-search \
+  ./tools/release_engineering/build_deb_in_docker.sh noble arm64
+```
+
+- packaging host tool:
+
+```bash
+PSEUDO_NATIVE_TOOLCHAIN=1 \
+PSEUDO_NATIVE_HOST_TOOLS=packaging \
   ./tools/release_engineering/build_deb_in_docker.sh noble arm64
 ```
 
@@ -707,6 +750,7 @@ PSEUDO_NATIVE_HOST_TOOL_LIST="xz zstd find grep sort dwz" \
   - `apt-get update`
   - `mk-build-deps`
   - pseudo-native compiler activation
+  - optional pseudo-native Bazel activation
   - `dpkg-buildpackage`
 - pseudo-native compiler activation:
   - `${PSEUDO_NATIVE_ROOT}/bin/cc` 존재 확인
@@ -735,6 +779,31 @@ PSEUDO_NATIVE_HOST_TOOL_LIST="xz zstd find grep sort dwz" \
     실행되는 단계도 일부 amd64 host tool을 사용할 수 있다.
   - `shell` group이 요청되면 `/usr/bin/bash`와 `/usr/bin/dash`도 Docker run
     시점부터 bind mount한다.
+- pseudo-native Bazel activation:
+  - `PSEUDO_NATIVE_BAZEL=1` 또는 `auto`일 때만 켜진다.
+  - `PSEUDO_NATIVE_TOOLCHAIN`이 켜져 있어야 한다.
+  - `/lib64/ld-linux-x86-64.so.2` symlink를 준비한다.
+  - `/lib/x86_64-linux-gnu`, `/usr/lib/x86_64-linux-gnu`가 없으면 bundle
+    내부 library directory로 symlink한다.
+  - `BAZELISK_FORCE_MACHINE_ARCH=x86_64`를 export한다.
+  - generated `.bazelrc`에 `startup --host_jvm_args=-Dos.arch=aarch64`를
+    추가한다.
+  - qemu workaround가 `auto`이면 `startup --batch`와 qemu용 build flag를
+    제거한다.
+  - `PSEUDO_NATIVE_BAZEL=0`으로 다시 빌드할 때는 위 startup flag를 제거한다.
+
+## Pseudo-Native Bazel 주의사항
+
+- x86_64 Bazel binary를 직접 실행해야 한다.
+  - `/lib64/ld-linux-x86-64.so.2 --library-path ... bazel` 형태로 실행하면
+    Bazel self-extracting binary가 loader를 archive로 오인해서 실패한다.
+- `-Dos.arch` 값은 `aarch64`를 사용한다.
+  - `arm64`로 주면 Bazel의 platform constraint와 `TARGET_CPU` 판단이 기대대로
+    맞지 않는다.
+- `--host_platform` 또는 `--platforms`만 강제로 바꾸는 방식은 generated local
+  C++ toolchain constraint와 충돌할 수 있다.
+  - 현재 구현은 Bazel JVM `os.arch`를 조정해서 `@platforms//host`와 local
+    toolchain 생성이 같은 방향으로 보이게 한다.
 
 ## Bazel Qemu Workaround
 
@@ -746,6 +815,8 @@ PSEUDO_NATIVE_HOST_TOOL_LIST="xz zstd find grep sort dwz" \
   - `DRAKE_DEB_BAZEL_BATCH=auto`
 - auto 조건:
   - amd64 host + arm64 container이면 workaround on
+  - 단, `PSEUDO_NATIVE_BAZEL=1` 또는 `auto`로 amd64 Bazel을 직접 실행하는 경우는
+    workaround off
   - amd64 native build이면 workaround off
   - arm64 host + arm64 container이면 workaround off
 - qemu workaround on일 때 `.bazelrc`에 추가하는 flag:
@@ -939,6 +1010,18 @@ test -e /lib64/ld-linux-x86-64.so.2
   - `/lib64/ld-linux-x86-64.so.2` symlink
   - `${PSEUDO_NATIVE_ROOT}/lib/x86_64-linux-gnu`
   - `${PSEUDO_NATIVE_ROOT}/usr/lib/x86_64-linux-gnu`
+
+- pseudo-native Bazel 확인:
+
+```bash
+python3 third_party/com_github_bazelbuild_bazelisk/bazelisk.py --print_env \
+  | rg 'bazel-[^-]+-linux-x86_64'
+bazel info --show_make_env | rg 'TARGET_CPU: aarch64'
+```
+
+- 기대값:
+  - Bazelisk `PATH`에 `bazel-<version>-linux-x86_64/bin`이 포함된다.
+  - Bazel make env의 `TARGET_CPU`가 `aarch64`이다.
 
 - optional host tool 확인:
 

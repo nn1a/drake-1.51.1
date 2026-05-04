@@ -75,7 +75,7 @@ force_value="${PSEUDO_NATIVE_FORCE:-0}"
 push_value="${PSEUDO_NATIVE_PUSH:-0}"
 host_tools_value="${PSEUDO_NATIVE_HOST_TOOLS:-all}"
 host_tool_list_value="${PSEUDO_NATIVE_HOST_TOOL_LIST:-}"
-bundle_format_version=5
+bundle_format_version=6
 
 resolve_host_tool_list() {
   local spec="$1"
@@ -166,6 +166,11 @@ resolve_host_tool_list() {
             dwz
           )
           ;;
+        packaging)
+          requested_tools+=(
+            dpkg-deb
+          )
+          ;;
         all)
           requested_tools+=(
             tar
@@ -192,6 +197,7 @@ resolve_host_tool_list() {
             seq tee
             dwz
             bash dash
+            dpkg-deb
           )
           ;;
         *)
@@ -373,6 +379,7 @@ if [[ -n "${host_tool_list}" ]]; then
     grep \
     coreutils \
     dwz \
+    dpkg \
     bash \
     dash
   )

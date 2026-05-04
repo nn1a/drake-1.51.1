@@ -302,7 +302,11 @@ def get_supported_machine_archs(version, operating_system):
 
 
 def normalized_machine_arch_name():
-    machine = platform.machine().lower()
+    machine = get_env_or_config("BAZELISK_FORCE_MACHINE_ARCH")
+    if machine:
+        machine = machine.lower()
+    else:
+        machine = platform.machine().lower()
     if machine == "amd64":
         machine = "x86_64"
     elif machine == "aarch64":

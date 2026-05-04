@@ -61,8 +61,55 @@ ifneq ($(DRAKE_DEB_BAZEL_OUTPUT_BASE),)
 			exit 2; \
 			;; \
 	esac; \
+	pseudo_native_bazel=0; \
+	case "$${PSEUDO_NATIVE_BAZEL:-0}" in \
+		1|yes|true) \
+			pseudo_native_bazel=1; \
+			;; \
+		auto) \
+			if [ -n "$${DRAKE_DEB_HOST_ARCH:-}" ] && \
+					[ -n "$${DRAKE_DEB_ARCH:-}" ] && \
+					[ "$${DRAKE_DEB_HOST_ARCH}" = amd64 ] && \
+					[ "$${DRAKE_DEB_ARCH}" = arm64 ]; then \
+				pseudo_native_bazel=1; \
+			fi; \
+			;; \
+		0|no|false|"") \
+			pseudo_native_bazel=0; \
+			;; \
+		*) \
+			echo "Unknown PSEUDO_NATIVE_BAZEL=$${PSEUDO_NATIVE_BAZEL}" >&2; \
+			exit 2; \
+			;; \
+	esac; \
+	if [ "$${pseudo_native_bazel}" = 1 ] && \
+			[ "$${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS:-auto}" = auto ]; then \
+		qemu_workarounds=0; \
+		if [ "$${DRAKE_DEB_BAZEL_BATCH:-auto}" = auto ]; then \
+			bazel_batch=0; \
+		fi; \
+	fi; \
+	bazel_jobs="$${DRAKE_DEB_BAZEL_JOBS:-}"; \
+	if [ -n "$${bazel_jobs}" ]; then \
+		case "$${bazel_jobs}" in \
+			''|*[!0-9]*) \
+				echo "Unknown DRAKE_DEB_BAZEL_JOBS=$${bazel_jobs}" >&2; \
+				exit 2; \
+				;; \
+		esac; \
+	fi; \
 	for rc in obj-*/drake_build_cwd/.bazelrc; do \
 		[ -e "$$rc" ] || continue; \
+		build_dir=$$(dirname "$$(dirname "$$rc")"); \
+		build_hash=$$(printf '%s' "/work/drake/$${build_dir}" | md5sum | awk '{print $$1}'); \
+		legacy_bazel_root=debian/.debhelper/generated/_source/home/.cache/bazel/_bazel_ubuntu; \
+		mkdir -p "$${legacy_bazel_root}"; \
+		ln -sfn "$(DRAKE_DEB_BAZEL_REPOSITORY_CACHE)" "$${legacy_bazel_root}/cache"; \
+		if [ -d /home/builder/.cache/bazel/_bazel_ubuntu/install ]; then \
+			ln -sfn /home/builder/.cache/bazel/_bazel_ubuntu/install \
+				"$${legacy_bazel_root}/install"; \
+		fi; \
+		ln -sfn "$(DRAKE_DEB_BAZEL_OUTPUT_BASE)" "$${legacy_bazel_root}/$${build_hash}"; \
 		sed -i 's|^startup --output_base=.*|startup --output_base="$(DRAKE_DEB_BAZEL_OUTPUT_BASE)"|' "$$rc"; \
 		if [ "$${bazel_batch}" = 1 ]; then \
 			if ! grep -qx 'startup --batch' "$$rc"; then \
@@ -70,6 +117,22 @@ ifneq ($(DRAKE_DEB_BAZEL_OUTPUT_BASE),)
 			fi; \
 		else \
 			sed -i '/^startup --batch$$/d' "$$rc"; \
+		fi; \
+		if [ "$${pseudo_native_bazel}" = 1 ]; then \
+			if ! grep -qx 'startup --host_jvm_args=-Dos.arch=aarch64' "$$rc"; then \
+				printf '%s\n' 'startup --host_jvm_args=-Dos.arch=aarch64' >> "$$rc"; \
+			fi; \
+		else \
+			sed -i '/^startup --host_jvm_args=-Dos\.arch=aarch64$$/d' "$$rc"; \
+		fi; \
+		if [ -n "$${bazel_jobs}" ]; then \
+			if grep -q '^build --jobs=' "$$rc"; then \
+				sed -i "s|^build --jobs=.*|build --jobs=$${bazel_jobs}|" "$$rc"; \
+			else \
+				printf '%s\n' "build --jobs=$${bazel_jobs}" >> "$$rc"; \
+			fi; \
+		else \
+			sed -i '/^build --jobs=[0-9][0-9]*$$/d' "$$rc"; \
 		fi; \
 		if grep -q '^build --repository_cache=' "$$rc"; then \
 			sed -i 's|^build --repository_cache=.*|build --repository_cache="$(DRAKE_DEB_BAZEL_REPOSITORY_CACHE)"|' "$$rc"; \

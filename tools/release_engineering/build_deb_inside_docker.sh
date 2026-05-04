@@ -14,10 +14,12 @@ set -euo pipefail
 : "${DRAKE_DEB_BAZEL_DISK_CACHE:=/home/builder/.cache/bazel/disk-cache}"
 : "${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS:=auto}"
 : "${DRAKE_DEB_BAZEL_BATCH:=auto}"
+: "${DRAKE_DEB_BAZEL_JOBS:=}"
 : "${PSEUDO_NATIVE_TOOLCHAIN:=0}"
 : "${PSEUDO_NATIVE_ROOT:=/opt/pseudo-native-toolchain}"
 : "${PSEUDO_NATIVE_HOST_TOOLS:=all}"
 : "${PSEUDO_NATIVE_HOST_TOOL_LIST:=}"
+: "${PSEUDO_NATIVE_BAZEL:=0}"
 
 export DEBIAN_FRONTEND=noninteractive
 export LANG=C.UTF-8
@@ -38,6 +40,7 @@ if [[ -n "${DRAKE_DEB_ARCH}" && "${actual_arch}" != "${DRAKE_DEB_ARCH}" ]]; then
   exit 2
 fi
 
+bazel_qemu_workarounds_setting="${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS}"
 bazel_qemu_workarounds=0
 case "${DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS}" in
   auto|"")
@@ -111,6 +114,36 @@ case "${PSEUDO_NATIVE_TOOLCHAIN}" in
     exit 2
     ;;
 esac
+
+pseudo_native_bazel=0
+case "${PSEUDO_NATIVE_BAZEL}" in
+  auto)
+    if [[ "${pseudo_native_toolchain}" -eq 1 && "${actual_arch}" == arm64 && \
+      "${DRAKE_DEB_HOST_ARCH}" == amd64 ]]
+    then
+      pseudo_native_bazel=1
+    fi
+    ;;
+  1|yes|true)
+    pseudo_native_bazel=1
+    ;;
+  0|no|false|"")
+    pseudo_native_bazel=0
+    ;;
+  *)
+    echo "Unknown PSEUDO_NATIVE_BAZEL=${PSEUDO_NATIVE_BAZEL}" >&2
+    exit 2
+    ;;
+esac
+if [[ "${pseudo_native_bazel}" -eq 1 && "${pseudo_native_toolchain}" -ne 1 ]]; then
+  echo "PSEUDO_NATIVE_BAZEL requires PSEUDO_NATIVE_TOOLCHAIN" >&2
+  exit 2
+fi
+PSEUDO_NATIVE_BAZEL="${pseudo_native_bazel}"
+if [[ "${pseudo_native_bazel}" -eq 1 && "${bazel_qemu_workarounds_setting}" == auto ]]; then
+  bazel_qemu_workarounds=0
+  DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS=0
+fi
 
 pseudo_native_host_tools=0
 case "${PSEUDO_NATIVE_HOST_TOOLS}" in
@@ -294,6 +327,43 @@ if [[ "${pseudo_native_toolchain}" -eq 1 ]]; then
   esac
 fi
 
+if [[ "${pseudo_native_bazel}" -eq 1 ]]; then
+  if [[ "${actual_arch}" != arm64 ]]; then
+    echo "Pseudo-native Bazel mode currently supports arm64 containers only" >&2
+    exit 2
+  fi
+  if [[ "${DRAKE_DEB_HOST_ARCH}" != amd64 ]]; then
+    echo "Pseudo-native Bazel mode requires an amd64 Docker host" >&2
+    exit 2
+  fi
+  if [[ ! -x "${PSEUDO_NATIVE_ROOT}/lib64/ld-linux-x86-64.so.2" ]]; then
+    echo "Missing bundled x86_64 loader in ${PSEUDO_NATIVE_ROOT}" >&2
+    exit 1
+  fi
+
+  echo "Activating pseudo-native amd64 Bazel"
+  mkdir -p /lib64
+  if [[ ! -x /lib64/ld-linux-x86-64.so.2 ]]; then
+    ln -sfn \
+      "${PSEUDO_NATIVE_ROOT}/lib64/ld-linux-x86-64.so.2" \
+      /lib64/ld-linux-x86-64.so.2
+  fi
+
+  for libdir in /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu; do
+    if [[ ! -e "${libdir}" && ! -L "${libdir}" ]]; then
+      mkdir -p "$(dirname "${libdir}")"
+      ln -s "${PSEUDO_NATIVE_ROOT}${libdir}" "${libdir}"
+    fi
+  done
+
+  export BAZELISK_FORCE_MACHINE_ARCH=x86_64
+  if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+    export LD_LIBRARY_PATH="${PSEUDO_NATIVE_ROOT}/lib/x86_64-linux-gnu:${PSEUDO_NATIVE_ROOT}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+  else
+    export LD_LIBRARY_PATH="${PSEUDO_NATIVE_ROOT}/lib/x86_64-linux-gnu:${PSEUDO_NATIVE_ROOT}/usr/lib/x86_64-linux-gnu"
+  fi
+fi
+
 if ! getent group "${HOST_GID}" >/dev/null; then
   groupadd --gid "${HOST_GID}" builder
 fi
@@ -329,17 +399,19 @@ if [[ "${reuse_build_tree}" -eq 0 ]]; then
   rm -rf obj-*
 else
   echo "Reusing existing obj-* build tree and Bazel caches when present"
+fi
 
-  # A migrated Bazel output_base can contain absolute symlinks to the old
-  # debhelper HOME. Keep those links valid while the persistent cache warms up.
-  legacy_bazel_root="debian/.debhelper/generated/_source/home/.cache/bazel/_bazel_ubuntu"
-  mkdir -p "${legacy_bazel_root}"
-  ln -sfn "${DRAKE_DEB_BAZEL_REPOSITORY_CACHE}" "${legacy_bazel_root}/cache"
-  if [[ -d /home/builder/.cache/bazel/_bazel_ubuntu/install ]]; then
-    ln -sfn /home/builder/.cache/bazel/_bazel_ubuntu/install \
-      "${legacy_bazel_root}/install"
-  fi
-  build_dir="obj-$(dpkg-architecture -qDEB_HOST_GNU_TYPE)"
+# A migrated Bazel output_base can contain absolute symlinks to the old
+# debhelper HOME. Keep those links valid while the persistent cache warms up.
+legacy_bazel_root="debian/.debhelper/generated/_source/home/.cache/bazel/_bazel_ubuntu"
+mkdir -p "${legacy_bazel_root}"
+ln -sfn "${DRAKE_DEB_BAZEL_REPOSITORY_CACHE}" "${legacy_bazel_root}/cache"
+if [[ -d /home/builder/.cache/bazel/_bazel_ubuntu/install ]]; then
+  ln -sfn /home/builder/.cache/bazel/_bazel_ubuntu/install \
+    "${legacy_bazel_root}/install"
+fi
+build_dir="obj-$(dpkg-architecture -qDEB_HOST_GNU_TYPE)"
+if [[ "${reuse_build_tree}" -eq 1 ]]; then
   if [[ ! -d "${build_dir}" ]]; then
     build_dir=
     for candidate in obj-*; do
@@ -349,12 +421,12 @@ else
       fi
     done
   fi
-  if [[ -n "${build_dir}" ]]; then
-    build_hash=$(printf '%s' "/work/drake/${build_dir}" | md5sum | awk '{print $1}')
-    ln -sfn "${DRAKE_DEB_BAZEL_OUTPUT_BASE}" "${legacy_bazel_root}/${build_hash}"
-  fi
-  chown -hR "${HOST_UID}:${HOST_GID}" debian/.debhelper
 fi
+if [[ -n "${build_dir}" ]]; then
+  build_hash=$(printf '%s' "/work/drake/${build_dir}" | md5sum | awk '{print $1}')
+  ln -sfn "${DRAKE_DEB_BAZEL_OUTPUT_BASE}" "${legacy_bazel_root}/${build_hash}"
+fi
+chown -hR "${HOST_UID}:${HOST_GID}" debian/.debhelper
 
 DRAKE_DEB_REUSE_BUILD_TREE="${reuse_build_tree}"
 export \
@@ -363,7 +435,9 @@ export \
   DRAKE_DEB_BAZEL_DISK_CACHE \
   DRAKE_DEB_BAZEL_QEMU_WORKAROUNDS \
   DRAKE_DEB_BAZEL_BATCH \
-  DRAKE_DEB_REUSE_BUILD_TREE
+  DRAKE_DEB_BAZEL_JOBS \
+  DRAKE_DEB_REUSE_BUILD_TREE \
+  PSEUDO_NATIVE_BAZEL
 
 su --preserve-environment --shell /bin/bash "${build_user}" -c '
   set -euo pipefail
