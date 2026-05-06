@@ -141,10 +141,12 @@ flowchart TD
   - 사용자가 실행하는 명령은 보통 `cc`, `c++`, `gcc`, `g++`, `gfortran`이다.
   - 실제 bundle 안에서는 `aarch64-linux-gnu-gcc`,
     `aarch64-linux-gnu-g++`, `aarch64-linux-gnu-gfortran`을 실행한다.
-  - wrapper는 command 이름을 보고 알맞은 cross compiler driver를 고른다.
+  - wrapper는 command 이름과 input language를 보고 알맞은 cross compiler driver를
+    고른다.
   - 예:
     - `cc` -> `aarch64-linux-gnu-gcc`
     - `c++` -> `aarch64-linux-gnu-g++`
+    - `cc foo.cpp` -> `aarch64-linux-gnu-g++`
     - `gfortran` 또는 Bazel의 `compiler` alias -> `aarch64-linux-gnu-gfortran`
 
 - GCC internal program:
@@ -189,6 +191,9 @@ flowchart TD
   - bundle 내부 GCC include directory는 canonical name인 `include` 대신
     `include.pseudo-native-bundle`로 보관한다.
   - wrapper는 가능한 한 arm64 rootfs의 native include path를 우선 사용한다.
+  - wrapper가 추가하는 standard include path는 Bazel action이 전달한 include path
+    뒤에 둔다. 그래야 `@yaml_cpp_internal`처럼 vendored header를 쓰는 target이
+    `/usr/include`의 system header에 가려지지 않는다.
   - 기대 include source:
     - `/usr/include/c++/<version>`
     - `/usr/include/aarch64-linux-gnu`
@@ -804,6 +809,17 @@ PSEUDO_NATIVE_HOST_TOOL_LIST="xz zstd find grep sort dwz" \
   C++ toolchain constraint와 충돌할 수 있다.
   - 현재 구현은 Bazel JVM `os.arch`를 조정해서 `@platforms//host`와 local
     toolchain 생성이 같은 방향으로 보이게 한다.
+- Rust compile은 아직 arm64 qemu 경로가 남는다.
+  - Drake의 Rust dependency는 Cargo build를 직접 실행하지 않고
+    `rules_rust`와 `crate_universe`가 생성한 Bazel action으로 `rustc`를 실행한다.
+  - 현재 pseudo-native Bazel은 host/target platform을 arm64로 유지하므로
+    `rules_rust`도 arm64 실행용 `rustc`를 선택한다.
+  - x86_64 실행용 aarch64 target Rust toolchain을 `--extra_toolchains`로 억지로
+    등록하면 proc-macro와 build script가 target/exec 축을 구분하지 못해 깨질 수
+    있다.
+  - Rust까지 amd64 native로 돌리려면 Bazel target platform은 aarch64, host/exec
+    platform은 x86_64로 분리하고, 그 조합에서 동작하는 explicit C++ cross
+    toolchain을 함께 등록해야 한다.
 
 ## Bazel Qemu Workaround
 
@@ -961,6 +977,13 @@ sed -n '/#include <...> search starts here:/,/End of search list./p' \
   - 낡은 bundle일 가능성이 높다.
   - `PSEUDO_NATIVE_FORCE=1`로 bundle을 재생성한다.
   - `.pseudo-native-format` 값을 확인한다.
+- `yaml_cpp_internal`에서 `convert.cpp:42:13`의 `expected initializer` /
+  `before '<' token` error가 발생하면:
+  - vendored `drake_hdr/yaml-cpp/...` header 대신 `/usr/include/yaml-cpp/...`
+    system header가 먼저 잡힌 흔적이다.
+  - pseudo-native wrapper가 Bazel include path보다 standard include path를 먼저
+    추가하는 오래된 bundle인지 확인한다.
+  - `PSEUDO_NATIVE_FORCE=1`로 bundle을 재생성한다.
 
 - shared object architecture 확인:
 

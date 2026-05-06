@@ -75,7 +75,7 @@ force_value="${PSEUDO_NATIVE_FORCE:-0}"
 push_value="${PSEUDO_NATIVE_PUSH:-0}"
 host_tools_value="${PSEUDO_NATIVE_HOST_TOOLS:-all}"
 host_tool_list_value="${PSEUDO_NATIVE_HOST_TOOL_LIST:-}"
-bundle_format_version=6
+bundle_format_version=7
 
 resolve_host_tool_list() {
   local spec="$1"
@@ -536,7 +536,16 @@ for arg in "$@"; do
   esac
 done
 
+if [[ "${mode}" == compiler && "${language}" == cxx ]]; then
+  case "${program}" in
+    "${target_triple}-gcc")
+      program="${target_triple}-g++"
+      ;;
+  esac
+fi
+
 compiler_include_args=()
+compiler_no_standard_include_args=()
 add_system_include_dir() {
   local include_dir="$1"
   if [[ -d "${include_dir}" ]]; then
@@ -544,7 +553,7 @@ add_system_include_dir() {
   fi
 }
 if [[ "${mode}" == compiler ]]; then
-  compiler_include_args=(-nostdinc)
+  compiler_no_standard_include_args=(-nostdinc)
   if [[ "${language}" == cxx ]]; then
     add_system_include_dir "/usr/include/c++/${gcc_version}"
     add_system_include_dir "/usr/include/${target_triple}/c++/${gcc_version}"
@@ -582,8 +591,9 @@ case "${mode}" in
       --sysroot=/ \
       "-B${gcc_dir}/" \
       "-B${root}/usr/${target_triple}/bin/" \
-      "${compiler_include_args[@]}" \
-      "$@"
+      "${compiler_no_standard_include_args[@]}" \
+      "$@" \
+      "${compiler_include_args[@]}"
     ;;
   linker)
     exec "${loader}" --library-path "${ld_library_path}" "${binary}" \

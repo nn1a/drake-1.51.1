@@ -144,7 +144,7 @@ cache_root="${DRAKE_DEB_CACHE_DIR:-${repo_parent}/.deb-cache}"
 base_image_prefix="${DRAKE_DEB_BASE_IMAGE_PREFIX:-drake-deb-build}"
 dockerfile="${repo_root}/tools/release_engineering/debian/Dockerfile"
 docker_context="${repo_root}/tools/release_engineering/debian"
-pseudo_native_format_version=5
+pseudo_native_format_version=7
 host_arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
 case "${host_arch}" in
   x86_64)
